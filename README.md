@@ -32,6 +32,36 @@ In **both** modes, Guardian generates a personalized incident report so first re
 
 ---
 
+## Three-Tier Agent Architecture
+
+Guardian is not one monolithic agent — it's an **Orchestrator** routing to **six specialist sub-agents**, each owning a domain of care, all sharing a common toolbelt.
+
+### Tier 1 — Orchestrator
+The single point that hears every signal (voice, vitals, sensor reading, schedule tick, UI command) and decides *which sub-agent owns this*, in what mode, and at what severity. It enforces escalation policy across agents — e.g., a Health Agent vitals anomaly the patient can't explain triggers a Safety Agent escalation.
+
+### Tier 2 — Specialist Sub-Agents
+
+| Sub-Agent | Owns | Example scenarios |
+|---|---|---|
+| **Safety Agent** | Falls, panic, violence, immediate physical danger | The fall, silent-morning, "Guardian, I'm scared", domestic-violence early-warning |
+| **Health Agent** | Vitals, anomalies, chronic-condition monitoring | Cardiac baseline deviation, Margaret's chronic panel, BP/glucose trends, slow-burn arm pain |
+| **Reminder Agent** | Medications, vitamins, appointments, refill watch | Sarah's iron-vs-calcium timing, vitamin schedule UI, missed-med detection |
+| **Companion Agent** | Conversation, recall, mood, calm-keeping | Memory recap ("what happened this week?"), mood check-ins, soothing during crisis |
+| **Behavior Agent** | Anger, addiction, depression, court-mandated monitoring | Court-ordered anger monitoring, depressed-young-adult, addiction relapse signals |
+| **Caregiver Liaison** | Reports, summaries, looping humans in | Weekly physician summary, counselor notes, probation-officer pings, family alerts |
+
+### Tier 3 — Shared Tool Bus
+Every sub-agent can call any tool. Tools are **stateless capabilities**, grouped into four buckets:
+
+- **Sensing** — audio listener, wearable vitals stream, BP/glucose meters, vision/motion, geolocation, wake-word + STT, environmental sensors, manual input (tap, mood).
+- **Memory & Reasoning** — event log (append-only), personal baseline model, conversation memory, regimen/schedule store, anomaly detector, pattern-absence detector, tiered risk classifier, drug-interaction check, LLM inference (small/large).
+- **Action** — voice output / TTS dialog, notification dispatcher, ambient lights / chimes, emergency caller (911), contact-tree messenger, UI dashboard, tap-to-confirm prompts. Output is **tiered**: whisper → nudge → alarm → call.
+- **Integrations** — Apple Health / Fitbit, Dexcom / Omron BP, Google / Apple Calendar, pharmacy / refill API, EHR / FHIR share, Twilio voice + SMS, counselor / probation-officer portals. Recipient routing varies per persona and consent mode.
+
+> **Design principle:** Tools are stateless capabilities. Sub-agents own the policy. Orchestrator owns the user.
+
+---
+
 ## Core Features
 
 1. **Live conversation transcription & medical summary** — structured clinical notes and a paramedic handoff summary, generated automatically from the patient's own words.

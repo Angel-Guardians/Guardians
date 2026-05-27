@@ -8,27 +8,67 @@ This document maps every block of the architecture diagram (and a few neighborin
 
 ## Architecture at a Glance
 
+Guardian is a **three-tier agent architecture** hosted inside a single Backend process. The Orchestrator routes signals to one of six specialist Sub-Agents; every Sub-Agent can call any tool on a shared four-bucket Tool Bus.
+
+### Conceptual view (agent tiers)
+
 ```
-                                                ┌──────────────┐
-                                                │   Database   │
-                                                └──────┬───────┘
-                                                       │
-┌──────┐   ┌──────────┐   ┌──────────────┐   ┌─────┐   ┌─▼─────────────────────┐   ┌─────┐   ┌──────┐
-│Voice │──▶│ Backend  │──▶│ Wake / Voice │──▶│ STT │──▶│   Agent (LLM core)    │──▶│ TTS │──▶│  UI  │
-│ Mic  │   │ (spine)  │   │ Recognition  │   │ASR  │   │  Tools + MCP servers  │   │     │   │ +Spkr│
-└──────┘   └──────────┘   └──────────────┘   └─────┘   └───────────────────────┘   └─────┘   └──────┘
-                ▲                                                  │
-                │                                                  ▼
-                │                                              External
-                └──────────────── intents / events ───────────(911, family,
-                                                              translation)
+                          ┌──────────────────────────────┐
+                          │   Guardian Orchestrator      │
+                          │  event router · escalation   │
+                          │  policy · profile-aware      │
+                          └───────────────┬──────────────┘
+                                          │
+   ┌─────────┬─────────┬──────────────────┼──────────────┬────────┬─────────┐
+   ▼         ▼         ▼                  ▼              ▼        ▼
+┌──────┐ ┌──────┐ ┌──────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐
+│Safety│ │Health│ │ Reminder │ │ Companion  │ │ Behavior │ │Caregiver │
+│Agent │ │Agent │ │  Agent   │ │   Agent    │ │  Agent   │ │  Liaison │
+└──┬───┘ └──┬───┘ └────┬─────┘ └─────┬──────┘ └────┬─────┘ └────┬─────┘
+   └────────┴──────────┴─────────────┴─────────────┴────────────┘
+                                  │
+                                  ▼
+   ══════════════════════ SHARED TOOL BUS ════════════════════════════
+   │  SENSING       │  MEMORY & REASONING   │  ACTION    │ INTEGRATIONS │
+   │  ───────────   │  ───────────────────  │  ────────  │ ─────────────│
+   │  Audio listener│  Event log            │  TTS dialog│ Fitbit/Apple │
+   │  Wearable HR   │  Personal baseline    │  Notifs    │ Dexcom/Omron │
+   │  Vision/motion │  Anomaly detector     │  Lights    │ Calendar     │
+   │  BP/glucose    │  Pattern-absence det. │  911 caller│ Pharmacy     │
+   │  Wake+VAD+STT  │  Risk classifier      │  Contacts  │ EHR/FHIR     │
+   │  Geolocation   │  Conv. memory         │  UI render │ Twilio       │
+   │  Env sensors   │  Regimen store        │  Confirm   │ Portals      │
+   │  Manual input  │  Drug-interaction chk │            │              │
+   │                │  LLM (small/large)    │            │              │
+   │                │  Medical KB (RAG)     │            │              │
+   ═════════════════════════════════════════════════════════════════════
 ```
 
-**Data-flow:** the mic feeds raw audio into the **Backend**, which is the spine of the system. Everything downstream — wake-word, STT, Agent, tools/MCP, TTS, UI, external comms — is orchestrated by the Backend. The Agent emits *intents*; the Backend turns those into side effects.
+### Physical view (deployment)
+
+```
+                                   ┌──────────────┐
+                                   │   Database   │
+                                   └──────┬───────┘
+                                          │
+┌──────┐   ┌──────────────────────────────▼─────────────────────────────┐
+│ Mic  │──▶│  Backend  (FastAPI + Pipecat + LangGraph)                  │──▶ UI / TTS
+└──────┘   │  ┌──────────┐  ┌──────────────┐  ┌────────────────────┐    │     /911
+           │  │ Sensing  │─▶│ Orchestrator │─▶│ 6 Sub-Agents       │    │
+           │  │ pipeline │  │ (supervisor) │  │ (LangGraph subgrph)│    │
+           │  └──────────┘  └──────────────┘  └─────────┬──────────┘    │
+           │                                            │               │
+           │                ┌──────── Shared Tool Bus ──┘               │
+           │                │  (Sensing / Memory & Reasoning /          │
+           │                │   Action / Integrations)                  │
+           └────────────────────────────────────────────────────────────┘
+```
+
+**Tools are stateless capabilities. Sub-Agents own the policy. Orchestrator owns the user.**
 
 ---
 
-## 1. Audio Capture & Front-End
+## 1. Audio Capture & Front-End  *(Sensing)*
 
 | Concern | Option A | Option B (recommended) | Option C |
 |---|---|---|---|
@@ -37,438 +77,468 @@ This document maps every block of the architecture diagram (and a few neighborin
 | **Noise suppression** | none | **`rnnoise`** (real-time NN denoise) | NVIDIA Maxine SDK |
 | **Echo cancellation** | none | **WebRTC AEC3** (`speexdsp` bindings) | — |
 
-**Recommendation:** ReSpeaker 6-Mic + `sounddevice` + `rnnoise`. The mic array matters for far-field pickup ("Guardian, I fell" from across the room). `rnnoise` keeps Whisper accurate when the TV is on.
+**Recommendation:** ReSpeaker 6-Mic + `sounddevice` + `rnnoise`. The mic array matters for far-field pickup ("Guardian, I fell" from across the room).
 
 ---
 
-## 2. Backend / API Server (the `Backend` block — the spine)
+## 2. Backend / API Server (the spine)
 
-This is the central orchestrator. The mic hands raw audio to the Backend, and **everything downstream is invoked, sequenced, and persisted by it**: wake-word detection, STT, Agent reasoning, tool execution, MCP calls, TTS playback, UI events, external emergency comms. The Agent reasons; the Backend **persists, exposes, schedules, and routes**. Without this layer the UI can't show history, scheduled reminders can't fire when the LLM is idle, and the Agent ends up doing infrastructure work it shouldn't.
+The central orchestrator's *host process*. Mic feeds raw audio in; the Backend runs the audio pipeline, hosts the **Orchestrator** and **Sub-Agents**, exposes the **Shared Tool Bus** as Python services, persists everything, and publishes events to the UI.
 
 ### Responsibilities
 
-- **Audio ingress.** Open the mic, run the wake-word + VAD pipeline, hand voiced segments to STT.
-- **Pipeline orchestration.** STT → Agent → TTS, with interruption handling (a Pipecat pipeline runs inside the Backend process).
-- **Persistence.** Write incidents, conversations, medication logs, vitals snapshots into the Database layer.
-- **API surface.** REST + WebSocket/SSE endpoints for the UI (history, live incident status, vitals stream).
-- **Scheduler.** Medication and check-in reminders fire on time, independent of whether the LLM is awake.
-- **Event multiplexing.** Wake word, audio event (fall sound), wearable anomaly, UI command, and scheduled reminder all become entries in a single `Event` stream the Agent subscribes to.
-- **Side-effect broker.** Twilio call, Spotify play, TTS request — the Agent emits *intents*, the Backend dispatches them.
-- **Authentication.** Household members + caregiver remote access.
-- **Audit logging.** PHIPA-compliant append-only log of every action taken on patient data.
+- **Audio ingress.** Open the mic, run wake-word + VAD, hand voiced segments to STT.
+- **Pipeline orchestration.** STT → Orchestrator → Sub-Agent → Tools → TTS (Pipecat inside the process).
+- **Agent hosting.** The Orchestrator and six Sub-Agents are LangGraph graphs running in this process.
+- **Tool Bus exposure.** Every tool in the four buckets (§12) is a Pydantic-typed Python service the Sub-Agents call.
+- **Persistence.** Incidents, conversations, medication logs, vitals snapshots written to the Database layer.
+- **API surface.** REST + SSE endpoints for the UI; webhook intake for wearable / pharmacy / calendar integrations.
+- **Scheduler.** APScheduler fires medication and check-in reminders independent of the LLM.
+- **Event multiplexing.** Wake word, audio event, wearable anomaly, UI command, scheduled tick → all become entries in one `Event` stream the Orchestrator subscribes to.
+- **Side-effect broker.** Sub-Agents emit *intents* (`call_911`, `play_calming_song`); the Backend dispatches them.
+- **Audit logging.** PHIPA-compliant append-only log.
 
 ### Module recommendations
 
 | Concern | Option A | Option B (recommended) | Option C |
 |---|---|---|---|
 | **Web framework** | Flask / Django | **FastAPI** | Litestar |
-| **ASGI server** | Uvicorn (single-worker) | **Uvicorn + Gunicorn** (multi-worker) | Hypercorn |
-| **Async task queue** | Celery + Redis | **Arq** (Redis-based, async-native, lightweight) | Dramatiq |
-| **Scheduler** | cron | **APScheduler** (in-process) or Arq's scheduled jobs | Temporal (overkill for hackathon) |
-| **Pub/sub event bus** | In-process `asyncio.Queue` (hackathon) | **NATS** (lightweight) | Redis Streams |
-| **WebSockets / SSE** | `websockets` (lib) | **FastAPI's `WebSocket` + `sse-starlette`** | Socket.IO |
-| **Validation** | Hand-rolled | **Pydantic v2** (shared with Agent tool schemas) | attrs + cattrs |
-| **Auth** | Username/password | **Passkey-only** (WebAuthn) for household; **Tailscale identity** for caregivers | Authelia |
+| **ASGI server** | Uvicorn (single-worker) | **Uvicorn + Gunicorn** | Hypercorn |
+| **Async task queue** | Celery + Redis | **Arq** (Redis-based, async-native) | Dramatiq |
+| **Scheduler** | cron | **APScheduler** (in-process) | Temporal |
+| **Event bus** | In-process `asyncio.Queue` | **NATS** (lightweight) | Redis Streams |
+| **WebSocket / SSE** | `websockets` | **FastAPI `WebSocket` + `sse-starlette`** | Socket.IO |
+| **Validation** | Hand-rolled | **Pydantic v2** | attrs + cattrs |
+| **Auth** | Username/password | **Passkeys (WebAuthn) + Tailscale identity** | Authelia |
 | **Migrations** | Hand-rolled SQL | **Alembic** (with SQLModel) | Liquibase |
-| **Background workflows** | Plain async tasks | **Arq workflows** | Temporal / Prefect |
 
-### Recommendation
+**Recommendation:** **FastAPI + Uvicorn + SQLModel + Alembic + Arq + APScheduler + sse-starlette**, with Pipecat embedded inside the same process.
 
-**FastAPI + Uvicorn + SQLModel + Alembic + Arq + APScheduler**, with `sse-starlette` for live updates to the UI and Pipecat embedded inside the Backend process for the real-time audio pipeline. The Agent talks to the Backend over an in-process Python interface (they share the same Python runtime); the UI talks to it over HTTP + SSE.
-
-### Why this shape
-
-- **One service, clear seams.** The Agent imports backend services as a Python module (no extra network hop), but external clients (UI, caregiver phone) go through HTTP/SSE. You get separation-of-concerns without microservice overhead — important at hackathon scale.
-- **Pydantic everywhere.** The same Pydantic models define DB rows (via SQLModel), API responses (via FastAPI), agent tool schemas (via LangGraph/PydanticAI), and event payloads. One source of truth.
-- **Scheduler lives in the Backend, not the Agent.** Medication reminders must fire at 8:00 AM whether or not the Agent is mid-conversation. APScheduler in the Backend dispatches an event; the Agent reacts.
-
-### Sketch of the directory layout
+### Directory layout
 
 ```
 backend/
 ├── audio/              # mic capture, Pipecat pipeline wiring
+├── orchestrator/       # top-tier LangGraph supervisor + routing rules
+├── agents/             # one subgraph per sub-agent
+│   ├── safety.py
+│   ├── health.py
+│   ├── reminder.py
+│   ├── companion.py
+│   ├── behavior.py
+│   └── caregiver_liaison.py
+├── tools/              # shared tool bus, 4 buckets
+│   ├── sensing/
+│   ├── memory_reasoning/
+│   ├── action/
+│   └── integrations/
 ├── api/                # FastAPI routers
-│   ├── incidents.py
-│   ├── medications.py
-│   ├── vitals.py
-│   └── events_sse.py
-├── services/           # Business logic the Agent also calls
-│   ├── patient_profile.py
-│   ├── incident_recorder.py
-│   ├── reminder_scheduler.py
-│   └── emergency_dispatch.py
+├── services/           # business logic the agents call
 ├── db/                 # SQLModel models + Alembic migrations
-├── events/             # Event bus, pub/sub
-├── workers/            # Arq workers (long-running jobs, retries)
+├── events/             # event bus, pub/sub
+├── workers/            # Arq workers
 └── main.py             # Uvicorn entrypoint
 ```
 
 ---
 
-## 3. Wake Word Detection
-
-Always-on, runs continuously inside the Backend's audio pipeline, must be cheap.
+## 3. Wake Word Detection  *(Sensing)*
 
 | Option | Notes |
 |---|---|
-| **openWakeWord** (recommended) | Open source, train custom wake words ("Hey Guardian"), ~50ms latency, runs on CPU so it doesn't compete with the LLM for GPU. |
-| Picovoice Porcupine | Higher accuracy but commercial license for production. |
+| **openWakeWord** (recommended) | Open source, custom wake words ("Hey Guardian"), ~50ms latency, CPU-only. |
+| Picovoice Porcupine | Higher accuracy but commercial. |
 | Vosk + keyword spotting | Free but heavier. |
 
-**Recommendation:** **openWakeWord** with a custom "Hey Guardian" model. Train on ~50 utterances per team member for the demo.
-
 ---
 
-## 4. Voice Activity Detection (VAD)
-
-Decides "is someone actually speaking right now" before we burn STT cycles.
+## 4. Voice Activity Detection (VAD)  *(Sensing)*
 
 | Option | Notes |
 |---|---|
-| **Silero VAD** (recommended) | 1MB ONNX model, 1ms latency, accurate, runs on CPU. The de-facto VAD for local voice agents. |
-| WebRTC VAD | Faster but less accurate, more false triggers. |
+| **Silero VAD** (recommended) | 1MB ONNX, 1ms latency, accurate. De-facto for local voice agents. |
+| WebRTC VAD | Faster but noisier. |
 | `pyannote.audio` VAD | Best accuracy, too heavy for always-on. |
 
-**Recommendation:** **Silero VAD**.
-
 ---
 
-## 5. Speech-to-Text (STT)
-
-This is the block labeled "STT" in your diagram. On DGX Spark we should exploit the Blackwell GPU.
+## 5. Speech-to-Text (STT)  *(Sensing)*
 
 | Option | Notes |
 |---|---|
-| **NVIDIA Parakeet-TDT-1.1B** (recommended) | NVIDIA's own ASR via NeMo. Currently #1 on HF OpenASR leaderboard. Streaming-capable. Built for this exact hardware. |
-| `faster-whisper` (large-v3-turbo) | CTranslate2-optimized Whisper. Best fallback if NeMo setup eats a day. |
-| `whisper.cpp` | Lightweight, runs on CPU. Backup. |
+| **NVIDIA Parakeet-TDT-1.1B** (recommended) | NVIDIA's own ASR via NeMo. Top of HF OpenASR leaderboard, streaming-capable, native to this hardware. |
+| `faster-whisper` (large-v3-turbo) | CTranslate2 Whisper. Hackathon fallback. |
+| `whisper.cpp` | CPU/GPU backup. |
 
-**Recommendation:** **Parakeet-TDT via NVIDIA NeMo**, with `faster-whisper large-v3-turbo` as the hackathon fallback. Stream partial transcripts so the agent can react to "I fell" before the sentence finishes.
+Stream partial transcripts so the Orchestrator can react to "I fell" before the sentence finishes.
 
 ---
 
-## 6. Speaker Recognition (Stretch Goal in diagram)
-
-Identifies *which* household member is talking — important for multi-resident homes and for not triaging the visiting grandkid as the patient.
+## 6. Speaker Recognition  *(Sensing, stretch goal)*
 
 | Option | Notes |
 |---|---|
-| **`pyannote.audio` 3.x** (recommended) | Diarization + speaker embedding in one library. Stable API. |
-| SpeechBrain ECAPA-TDNN | Lower-level, more control, more work. |
-| Resemblyzer | Simple, older, less accurate. |
+| **`pyannote.audio` 3.x** (recommended) | Diarization + embeddings in one library. |
+| SpeechBrain ECAPA-TDNN | Lower-level. |
+| Resemblyzer | Simple, older. |
 
-**Recommendation:** **`pyannote.audio`** with a 30-second enrollment per household member during onboarding.
+30-second enrollment per household member at onboarding.
 
 ---
 
-## 7. Audio Event Detection (Not in diagram — recommended addition)
+## 7. Audio Event Detection  *(Sensing — recommended addition, not yet in diagram)*
 
-For passive mode: detecting falls, glass break, coughing fits, distress sounds without waiting for speech.
+For Safety Agent passive triggers: falls, glass break, coughing fits.
 
 | Option | Notes |
 |---|---|
-| **CLAP (LAION/Microsoft)** (recommended) | Contrastive language-audio model. You can describe events in natural language ("body hitting floor", "person coughing repeatedly") without training a classifier per event. |
-| YAMNet (TF Hub) | Pre-trained on 521 AudioSet events. Fast, less flexible. |
-| PANNs | Strong baseline, similar to YAMNet. |
+| **CLAP (LAION/Microsoft)** (recommended) | Describe events in natural language ("body hitting floor"). No per-event training. |
+| YAMNet | Pre-trained on 521 AudioSet events. Cheap first-pass filter. |
+| PANNs | Strong baseline. |
 
-**Recommendation:** **CLAP** for flexibility + YAMNet as a fast first-pass filter. Run YAMNet always; only invoke CLAP when YAMNet flags something interesting.
+**Recommendation:** YAMNet always-on; invoke CLAP only when YAMNet flags something interesting.
 
 ---
 
-## 8. LLM Inference Runtime
-
-The brain of the Agent box.
+## 8. LLM Inference Runtime  *(Memory & Reasoning)*
 
 | Option | Notes |
 |---|---|
-| **NVIDIA NIM + TensorRT-LLM** (recommended for production) | Most optimized path on Blackwell. ~2-4x throughput over vLLM on NVIDIA hardware. |
-| **vLLM** (recommended for hackathon) | Easier setup, excellent throughput, OpenAI-compatible API out of the box. |
-| Ollama | Simplest dev experience, fine for the demo if vLLM gives you grief on ARM. |
-| llama.cpp | CPU/GPU, lightweight, good fallback. |
-
-**Recommendation:** **vLLM** during the hackathon (you'll spend zero time on inference plumbing), migrate to **NIM/TensorRT-LLM** post-event if you continue.
+| **NVIDIA NIM + TensorRT-LLM** (recommended for production) | Best on Blackwell, 2–4x throughput over vLLM. |
+| **vLLM** (recommended for hackathon) | Easy, OpenAI-compatible, excellent throughput. |
+| Ollama | Simplest dev. |
+| llama.cpp | Lightweight fallback. |
 
 ---
 
-## 9. LLM Models
+## 9. LLM Models  *(Memory & Reasoning)*
 
-You'll likely want **two** models: a fast generalist for conversation/agent loop, and a medical-grounded model for triage reasoning.
+You need at least two: a fast generalist for the Orchestrator + chatty Sub-Agents (Companion, Reminder), and a clinical model the Health/Safety agents can consult.
 
 | Role | Model | Notes |
 |---|---|---|
-| **Generalist agent** (recommended) | **Llama 3.3 70B Instruct** (or Llama 3.1 8B for latency) | Strong tool use, good instruction following. 8B fits comfortably with room for everything else. |
-| Generalist alt | Qwen 2.5 32B / Qwen 3 | Excellent multilingual — useful given your 911 interpretation scenario. |
-| **Medical reasoning** | **Meditron-7B / Meditron-70B** (EPFL) | Llama-based, continued-pretrained on PubMed + clinical guidelines. Open source. |
-| Medical alt | OpenBioLLM-Llama3-8B | Solid medical fine-tune. |
-| **Triage scoring (CTAS)** | Small fine-tuned classifier on top of a 1B model | Wrap structured CTAS output in a schema, not free text. |
+| **Generalist / Orchestrator** (recommended) | **Llama 3.1 8B Instruct** | Fast, strong tool use, fits with room for everything else. Llama 3.3 70B for production. |
+| Multilingual alt | **Qwen 2.5 32B / Qwen 3** | Useful for the 911-interpretation scenario. |
+| **Clinical reasoning** | **Meditron-7B / Meditron-70B** (EPFL) | Llama-based, continued-pretrained on PubMed + clinical guidelines. |
+| Clinical alt | OpenBioLLM-Llama3-8B | Solid medical fine-tune. |
+| **Triage (CTAS) scoring** | Tiny model fine-tuned for structured output | Or constrain Llama 3.1 8B to a Pydantic schema. |
+| **Tiny model for the Risk Classifier** | **Phi-3.5-mini** or **Gemma-2-2B** | Cheap, fast, runs alongside the big model for the always-on classifier tool. |
 
-**Recommendation for hackathon:** Run **Llama 3.1 8B Instruct** as the agent and call **Meditron-7B** as a "consult" tool when the agent needs clinical reasoning. Don't try to fine-tune anything during the hackathon — use prompting + a medical RAG layer instead.
-
----
-
-## 10. Agent Framework
-
-Orchestrates the tool-using loop shown in your diagram.
-
-| Option | Notes |
-|---|---|
-| **LangGraph** (recommended) | State-machine-style agents. Perfect for Guardian's escalation graph (check-in → family alert → 911). Built-in persistence, replay, human-in-the-loop. |
-| **PydanticAI** | Type-safe, clean. Lighter than LangGraph but less mature for stateful agents. |
-| CrewAI | Multi-agent specialization. Overkill for one Guardian. |
-| Smolagents (Hugging Face) | Minimal, fast to learn. |
-
-**Recommendation:** **LangGraph**. The escalation logic (passive watch → soft check-in → loud check-in → contact family → call 911) is *literally* a state graph. Don't fight that with prompt engineering.
+**Hackathon picks:** Llama 3.1 8B as the generalist, Meditron-7B as a `clinical_consult` tool, Phi-3.5-mini for the tiered Risk Classifier.
 
 ---
 
-## 11. Agent Tools (the `Tools: [...]` block)
+## 10. Orchestrator (Tier 1)
 
-Each tool is its own well-scoped module.
+The top-tier agent that hears every signal and decides which Sub-Agent owns it. Implemented as a **LangGraph supervisor**.
 
-| Tool in diagram | Implementation |
-|---|---|
-| **`note_taking`** | LangGraph node that appends a structured `IncidentNote` (Pydantic model) to the conversation log. Auto-summarizes with the LLM when the incident closes. |
-| **`send_reminders`** | APScheduler (Python) or a cron-driven worker. Pushes reminders via TTS + UI + optional SMS. |
-| **`call_emergency`** | Twilio Voice API for the hackathon demo (mock 911). In production: regional CAD/911 integration. |
-| **`bio_marker`** (smartwatch data) | See **§16 Wearable Integration**. |
-| **`making_calm`** | Composite: TTS with calming voice + Spotify MCP for music + guided breathing script library (text → TTS). |
+### Responsibilities
 
-**Recommendation:** Define every tool as a Pydantic-typed function with a JSON schema so the LLM can never call it with garbage. Keep tools idempotent where possible.
+- **Event intake.** Subscribe to the Backend's `Event` stream (voice utterance, wearable anomaly, schedule tick, audio event, UI command).
+- **Routing.** Pick the Sub-Agent that owns the event based on signal type + patient profile + current mode (passive/active).
+- **Severity assignment.** Tag every routed event with an initial severity (info / nudge / alert / emergency); the Sub-Agent can upgrade.
+- **Cross-agent escalation.** If Health Agent flags an unexplained vitals anomaly, the Orchestrator can hand off to Safety Agent and put Companion Agent in calm-keeping mode in parallel.
+- **Mode arbitration.** Only one Sub-Agent "holds the microphone" at a time, but several can run passive workflows concurrently.
+- **Audit trail.** Every routing decision logged with a reason — important for PHIPA + debugging.
 
----
+### Module recommendations
 
-## 12. MCP Servers (the `mcp: [...]` block)
-
-Anthropic's Model Context Protocol — exactly the right abstraction here.
-
-| MCP Server | What it does | Source |
+| Pattern | Option | Notes |
 |---|---|---|
-| **Google Calendar MCP** | Read appointments (so Guardian knows the doctor's visit is tomorrow), create reminders. | Use the community `mcp-server-google-calendar` or build a thin one with the official MCP Python SDK. |
-| **Spotify MCP** | Play relaxing music during anxiety/active mode. | Community `mcp-server-spotify` exists; needs OAuth setup. |
-| **Twilio MCP** (recommended addition) | Send SMS / make calls for family alerts. | Build with the MCP Python SDK + Twilio REST API. |
-| **Toronto Open Data MCP** (recommended addition) | Pull nearest ambulance station, average response time per neighborhood. | Build — it's just an HTTP wrapper around `open.toronto.ca`. |
-| **Filesystem MCP** | Lets the agent read the local medical KB. | Official Anthropic MCP server. |
+| **Supervisor pattern** | **LangGraph `Supervisor`** (recommended) | First-class supervisor pattern; subgraphs are first-class nodes; state persistence + replay built in. |
+| | LangChain `AgentExecutor` | Older, less stateful. |
+| | CrewAI | Multi-agent but assumes role-play; not the right shape. |
+| | OpenAI Swarm | Lightweight but routing only, no persistence. |
+| **Routing logic** | LLM-as-router | Generalist Llama 3.1 8B picks the sub-agent. |
+| | Rule-based router | Deterministic + cheap for clear signals (e.g., audio event of category=`fall` → Safety Agent). |
+| | **Hybrid** (recommended) | Rules for unambiguous signals, LLM for narrative ones. |
+| **State store** | **LangGraph checkpointer → SQLite** | Lets you resume an in-flight incident across restarts. |
 
-**Recommendation:** Wrap each external system as MCP — don't bake them as bespoke tools. This keeps the agent core portable and the external integrations swappable.
+**Recommendation:** **LangGraph Supervisor** with a hybrid router (rules for clear signals, LLM for narrative), checkpointing to SQLite.
 
 ---
 
-## 13. Translation (the Google Translate icon)
+## 11. Sub-Agents (Tier 2)
 
-For multilingual 911 interpretation and for non-English-primary patients.
+Each Sub-Agent is its own **LangGraph subgraph** with: its own system prompt, its own allowed tool subset (a view onto the Shared Tool Bus), its own escalation policy, and its own personality for TTS.
+
+| Sub-Agent | Allowed tools (subset of Tool Bus) | Key state | Escalation ceiling |
+|---|---|---|---|
+| **Safety Agent** | audio listener, CLAP, geolocation, contact-tree messenger, **911 caller**, lights/chimes, TTS (urgent voice) | Active incident object, location, last-known patient response | **911 + family contact** |
+| **Health Agent** | wearable vitals, BP/glucose, anomaly detector, baseline model, drug-interaction check, medical KB (RAG), Meditron consult, TTS (calm voice) | Vitals time-series, condition list, medication list | Notify family / suggest doctor visit; escalate to Safety on red flags |
+| **Reminder Agent** | regimen/schedule store, calendar integration, pharmacy/refill API, notification dispatcher, tap-to-confirm prompt, TTS (gentle voice) | Active reminders, intake log, refill timers | Caregiver Liaison after N missed doses |
+| **Companion Agent** | conversation memory, event log, mood log, TTS (warm voice), ambient lights (calming), Spotify | Mood baseline, conversation history, weekly summary buffer | Hand off to Health/Safety on red flags |
+| **Behavior Agent** | conversation memory, audio listener, risk classifier (tiered), counselor/officer portal, contact-tree, TTS (firm/de-escalating voice) | Behavior baseline, trigger history, consent flags | Counselor portal + (if court-ordered) probation officer |
+| **Caregiver Liaison** | event log, conversation memory, EHR/FHIR share, contact-tree messenger, Twilio (SMS + voice), UI dashboard renderer | Recipient routing table, consent matrix, share log | Generates outbound reports; no in-home escalation |
+
+### Module recommendations
+
+| Concern | Pick |
+|---|---|
+| Subgraph framework | **LangGraph** (recommended) — each sub-agent is a `StateGraph` registered as a subgraph node of the Orchestrator |
+| Per-agent prompts | Markdown templates in `agents/<name>/prompt.md`, hot-reloadable in dev |
+| Tool-subset gating | A Pydantic schema per sub-agent listing allowed tool names; enforced in the tool dispatcher |
+| Voice profile per agent | A `voice_profile` field on each sub-agent → passed to TTS; map to Kokoro voice IDs |
+| Hand-off protocol | `HandoffEvent` Pydantic model emitted onto the event bus; supervisor re-routes |
+
+---
+
+## 12. Shared Tool Bus (Tier 3 — overview)
+
+Every Sub-Agent calls into the same flat namespace of Pydantic-typed tool functions. Tools are **stateless** (any state belongs in `services/` or the Database). The four buckets are organizational; there is no enforcement at the bucket level — gating happens per-agent (§11).
+
+### Bucket contents and where they live in this doc
+
+| Bucket | Tools | Detailed in |
+|---|---|---|
+| **Sensing** | audio listener, wake+VAD+STT, vision/motion, wearable vitals, BP/glucose, env sensors, geolocation, manual input | §1, §3–§7, §17 |
+| **Memory & Reasoning** | event log, personal baseline, conversation memory, regimen store, anomaly detector, pattern-absence detector, risk classifier, drug-interaction check, medical KB RAG, LLM inference | §8–§9, §13, §16, §18 |
+| **Action** | TTS dialog, notification dispatcher, ambient lights/chimes, 911 caller, contact-tree messenger, UI renderer, tap-to-confirm | §19, §21, §22 |
+| **Integrations** | Apple Health / Fitbit, Dexcom / Omron, Calendar, pharmacy / refill, EHR / FHIR, Twilio, counselor/officer portal | §14, §17, §19 |
+
+### Cross-cutting design rules
+
+- **Stateless interface.** Every tool is `def tool(args: ArgsModel) -> ResultModel`. No hidden globals.
+- **Pydantic everywhere.** Tool schemas double as LLM tool descriptions, request/response validators, and DB row shapes.
+- **Idempotency keys.** `call_911`, `send_sms`, `pharmacy_refill` all take an idempotency key — Sub-Agents are stateful, tools are not.
+- **Audit on the tool side.** Every tool invocation writes to the audit log automatically via a decorator. The agent author can't forget.
+- **Tiered output for Action tools.** All Action tools accept a `severity` enum (`whisper / nudge / alarm / call`) — the same `notify_family` tool whispers a text or makes a voice call depending on level.
+
+---
+
+## 13. Reasoning Modules  *(Memory & Reasoning — the non-LLM smarts)*
+
+These are the dedicated modules shown in the SVG: **personal baseline model**, **anomaly detector**, **pattern-absence detector**, **tiered risk classifier**, **drug-interaction check**, **event log**.
+
+| Module | Recommendation | Notes |
+|---|---|---|
+| **Personal baseline model** | Online statistics (rolling mean/variance + EWMA) per vital, per time-of-day, per activity context. **River** (Python online ML) for the maintained version. | "Unusual for *this* user" beats "unusual for the population." |
+| **Anomaly detector** | **PyOD** with **IsolationForest** + **MAD** for univariate (HR, BP, glucose); **deep SVDD** for multivariate. | Run as a service the Health Agent and Behavior Agent both consult. |
+| **Pattern-absence detector** | Custom: maintain a per-day rhythm fingerprint (audio activity per 15-min bucket, motion events, mic energy). Flag when current day deviates beyond N MAD from the rolling baseline. | The "silent morning" scenario. |
+| **Tiered risk classifier** | Small fine-tuned classifier (Phi-3.5-mini or a sklearn gradient-boosted model on extracted features) emitting a 4-level severity. | Cheap so it can run on every event. The big LLM only gets called for ambiguous cases. |
+| **Drug-interaction check** | Local snapshot of **RxNav / DrugBank** + a deterministic rules engine. | No API call at runtime — pure lookup on the patient's med list. |
+| **Event log** | Append-only table in SQLite, with a content-hash chain for tamper-evidence. | Foundational for PHIPA audit + replay. |
+| **Conversation memory** | Short-term in-process, long-term in Qdrant with episode-level summaries (LLM-generated nightly). | Companion Agent's memory recap feature relies on this. |
+
+**Recommendation:** A `reasoning/` sub-package in the Backend with one file per module above, each exposed as a tool on the bus.
+
+---
+
+## 14. MCP Servers  *(Integrations layer)*
+
+Anthropic's Model Context Protocol — the right abstraction for external systems each Sub-Agent might need.
+
+| MCP Server | Used by | Source |
+|---|---|---|
+| **Google Calendar MCP** | Reminder Agent, Caregiver Liaison | Community `mcp-server-google-calendar` or build with MCP Python SDK |
+| **Spotify MCP** | Companion Agent (relaxing music), Behavior Agent (de-escalation) | Community `mcp-server-spotify` |
+| **Twilio MCP** | Safety Agent, Caregiver Liaison | Build with MCP Python SDK + Twilio REST |
+| **Toronto Open Data MCP** | Safety Agent (nearest ambulance station) | Build — HTTP wrapper around `open.toronto.ca` |
+| **Pharmacy / Refill MCP** | Reminder Agent | Custom; per-pharmacy backend |
+| **EHR / FHIR MCP** | Caregiver Liaison | Build on **HAPI FHIR** client; outbound-only for the share scenario |
+| **Filesystem MCP** | All agents (read medical KB) | Official Anthropic MCP server |
+
+**Recommendation:** Wrap every external system as MCP — keeps each Sub-Agent's allowed-tool list portable and swappable.
+
+---
+
+## 15. Translation  *(Integrations)*
+
+For the multilingual 911-interpretation scenario and non-English-primary patients.
 
 | Option | Notes |
 |---|---|
-| **Meta NLLB-200** (recommended for text) | 200 languages, fully local, multiple sizes (600M to 54B). |
-| **Meta SeamlessM4T v2** (recommended for speech-to-speech) | Direct speech→speech translation in 100 languages. Game-changer for paramedic handoff with a non-English speaker. |
-| Whisper (translation mode) | Whisper can transcribe-and-translate-to-English in one shot. Limited to "to-English." |
-
-**Recommendation:** **SeamlessM4T v2** for the live-interpretation scenario, **NLLB-200** as a text-only fallback. Both run locally on DGX Spark.
+| **Meta SeamlessM4T v2** (recommended for speech→speech) | 100 languages, fully local. Game-changer for paramedic handoff with a non-English speaker. |
+| **Meta NLLB-200** (recommended for text) | 200 languages, fully local. |
+| Whisper (translate mode) | To-English only. |
 
 ---
 
-## 14. Medical Knowledge Base (RAG)
+## 16. Medical Knowledge Base (RAG)  *(Memory & Reasoning)*
 
-So Guardian's medical reasoning is grounded in real guidelines, not hallucinated.
+Grounds clinical reasoning in real guidelines.
 
 | Component | Recommendation | Notes |
 |---|---|---|
-| **Embedding model** | **NVIDIA NV-Embed-v2** or **MedCPT** | NV-Embed for general, MedCPT (NIH) for medical-specific retrieval. |
-| **Vector DB** | **Qdrant** (recommended) or ChromaDB | Qdrant for production-grade filters and persistence, Chroma for dead-simple hackathon use. |
-| **Re-ranker** | **bge-reranker-v2-m3** | Optional but improves precision a lot. |
-| **Corpus** | First-aid manuals, CTAS guidelines, drug interaction databases (RxNav local snapshot) | Pre-ingest at build time. |
-
-**Recommendation:** **Qdrant + NV-Embed-v2 + MedCPT** as a dual-index. General queries hit NV-Embed; explicitly clinical queries hit MedCPT.
+| **Embedding model** | **NVIDIA NV-Embed-v2** (general) + **MedCPT** (medical) | Dual-index — general queries to NV-Embed, clinical to MedCPT. |
+| **Vector DB** | **Qdrant** | Chroma is fine for hackathon; Qdrant for production filters & persistence. |
+| **Re-ranker** | **bge-reranker-v2-m3** | Optional but improves precision. |
+| **Corpus** | First-aid manuals, **CTAS guidelines**, RxNav local snapshot, condition-specific patient guides | Pre-ingest at build time. |
 
 ---
 
-## 15. Database Layer (the `Database` cylinder)
+## 17. Wearable / Vitals Integration  *(Sensing + Integrations)*
 
-Three different data shapes; don't try to use one store for all of them.
-
-| Data | Store | Why |
-|---|---|---|
-| **Patient profile, meds, contacts, conditions** | **SQLite with SQLCipher** (recommended) | Single-file, encrypted at rest, zero ops. Perfect for a single-home deployment. |
-| Patient profile alt | PostgreSQL with `pgcrypto` | If you need multi-user or remote caregiver UI. |
-| **Vitals time-series** | **InfluxDB 3** (recommended) or TimescaleDB | Built for this access pattern. |
-| **Conversation embeddings / memory** | **Qdrant** | Same instance as the medical KB. |
-| **Audio recordings & transcripts** | Encrypted local filesystem + manifest in SQLite | Don't put raw audio in a database. |
-| **ORM** | **SQLModel** (Pydantic + SQLAlchemy) | Type-safe, plays nicely with FastAPI and Pydantic AI. |
-
-**Recommendation:** **SQLite (SQLCipher) + InfluxDB + Qdrant**, accessed through SQLModel for the relational pieces.
-
----
-
-## 16. Wearable / Vitals Integration (`bio_marker` tool)
-
-Real-time pulse, HR, SpO₂ feeding the triage engine.
+Feeds the **Health Agent** and the **personal baseline model**.
 
 | Source | How to integrate locally |
 |---|---|
-| **Fitbit** (recommended) | Fitbit Web API requires OAuth + cloud — *for production* run a local proxy that fetches via OAuth on a schedule and immediately purges cloud copies. **For hackathon**, use the **Bluetooth GATT** path via `bleak` to read direct from the watch. |
-| **Garmin** | Garmin Health API or BLE direct via `bleak`. |
-| **Apple Watch** | HealthKit only — requires an iPhone in the loop. |
-| **Generic BLE chest strap** (Polar H10) | Direct via `bleak`, sub-second HR. Best for live demo because it's cheap and the data is clean. |
-| **Time-series storage** | **InfluxDB** or **TimescaleDB** | InfluxDB is faster to set up. |
-
-**Recommendation:** **Polar H10 chest strap via `bleak` → InfluxDB** for the demo. Mention the Fitbit local-proxy design in the README for the privacy story.
-
----
-
-## 17. Emergency Communication (`call_emergency` tool, family alerts)
-
-| Action | Module |
-|---|---|
-| **SMS to family** (recommended) | **Twilio Programmable Messaging** |
-| **Voice call to family** | **Twilio Programmable Voice** + TTS-generated message |
-| **911 dispatch** (demo) | Twilio outbound voice with a pre-recorded incident summary |
-| **911 dispatch** (real) | NENA i3 / regional CAD integration — out of scope for hackathon |
-| **Push notifications to caregiver app** | **ntfy.sh** (self-hosted) or Firebase |
-
-**Recommendation:** **Twilio** for the demo (all three channels). Mention `ntfy.sh` self-hosted as the privacy-preserving alternative.
+| **Polar H10 chest strap** (recommended for hackathon demo) | Direct BLE via `bleak`, sub-second HR. Cheap, clean data. |
+| **Fitbit** | Production: local OAuth proxy + immediate cloud purge. Hackathon: BLE GATT via `bleak`. |
+| **Dexcom CGM** | Dexcom Share / Follow API for real-time glucose. |
+| **Omron BP cuff** | BLE via `bleak`, manufacturer GATT profile. |
+| **Apple Watch** | HealthKit, requires iPhone in the loop. |
+| **Time-series storage** | **InfluxDB 3** (recommended) or TimescaleDB. |
 
 ---
 
-## 18. Voice Agent Orchestration (gluing audio I/O ↔ STT ↔ Agent ↔ TTS together)
+## 18. Database Layer
 
-Rather than wiring every piece manually, use a real-time voice-agent framework. This runs **inside** the Backend process.
+Three data shapes — don't try to use one store for all.
+
+| Data | Store | Why |
+|---|---|---|
+| Patient profile, meds, contacts, conditions, regimens | **SQLite + SQLCipher** | Encrypted at rest, single file, zero ops |
+| Vitals time-series | **InfluxDB 3** | Built for this access pattern |
+| Conversation embeddings + medical KB | **Qdrant** | Same instance for both indices |
+| Audio recordings + transcripts | Encrypted filesystem + SQLite manifest | Don't put raw audio in a DB |
+| Event log (append-only) | SQLite with content-hash chain | Tamper-evident audit trail |
+| ORM | **SQLModel** (Pydantic + SQLAlchemy) | Same Pydantic models everywhere |
+
+---
+
+## 19. Emergency Communication + Notification Dispatcher  *(Action + Integrations)*
+
+The "tiered output" pipe: whisper → nudge → alarm → call.
+
+| Severity | Channel | Module |
+|---|---|---|
+| Whisper | Soft TTS in the room | Kokoro / Riva |
+| Nudge | UI toast + ambient light | SSE → Next.js, Hue/Matter via `python-matter-server` |
+| Alarm | Loud TTS + bright light + caregiver SMS | + **Twilio Programmable Messaging** |
+| Call | Voice call to family + 911 dispatch | **Twilio Programmable Voice** (demo); NENA i3 / regional CAD (production) |
+| Push notif (out-of-home) | Caregiver phone | **ntfy.sh** (self-hosted) or Firebase |
+
+The Sub-Agent picks the severity; the **notification dispatcher tool** picks the channel mix. One tool, four behaviors.
+
+---
+
+## 20. Voice Agent Orchestration  *(audio I/O ↔ STT ↔ LLM ↔ TTS glue)*
+
+This runs **inside** the Backend.
 
 | Option | Notes |
 |---|---|
-| **Pipecat** (Daily) (recommended) | Open source, designed exactly for this: VAD → STT → LLM → TTS pipelines with interruption handling. Pluggable everywhere. |
-| **LiveKit Agents** | Production-grade, real-time, more infra heavy. |
-| **Vocode** | Similar to Pipecat, slightly less active. |
-| Hand-rolled | Don't — interruption handling is the hard part. |
+| **Pipecat** (recommended) | Designed for VAD → STT → LLM → TTS with interruption handling. Pluggable. |
+| LiveKit Agents | Production-grade, heavier. |
+| Vocode | Similar to Pipecat. |
 
-**Recommendation:** **Pipecat**, with LangGraph driving the conversational policy inside the LLM node.
+**Recommendation:** Pipecat with LangGraph (the Orchestrator) as the LLM stage.
 
 ---
 
-## 19. Text-to-Speech (TTS)
+## 21. Text-to-Speech (TTS)  *(Action)*
 
-The voice the patient actually hears. The Backend hands a text response (plus a "voice profile" — calm, urgent, whispered for night-time) to TTS, which streams audio back through the speaker.
+The voice the patient hears — Sub-Agents pass a `voice_profile` so each agent can have its own tone.
 
 | Option | Notes |
 |---|---|
-| **NVIDIA Riva** (recommended for production) | Native to DGX. Sub-100ms first-byte latency. Multiple voices. Streaming. |
-| **Kokoro-82M** (recommended for hackathon) | 82M params, runs anywhere, *shockingly* natural quality for the size. Released 2024. |
-| Piper | Fast, lightweight, slightly robotic. Good fallback. |
-| XTTS-v2 (Coqui) | Voice cloning — could clone a family member's voice for comfort. Heavier. |
-| F5-TTS | Zero-shot voice cloning, newer. |
+| **Kokoro-82M** (recommended hackathon) | 82M params, runs anywhere, shockingly natural. |
+| **NVIDIA Riva** (recommended production) | DGX-native, sub-100ms first-byte. Multiple voices. |
+| Piper | Light, robust fallback. |
+| XTTS-v2 / F5-TTS | Voice cloning — optionally clone a trusted family member's voice. |
 
-**Recommendation:** **Kokoro** for the hackathon demo, **Riva** for production. Optionally use **XTTS-v2** in onboarding to clone the voice of a trusted family member — a familiar voice during an emergency genuinely helps.
-
-**Integration note:** TTS is called by the Backend (via Pipecat's TTS service stage), not by the Agent directly. That way the Backend can log every utterance for the incident record, throttle if the LLM is rambling, and swap the voice profile based on context (calm vs. urgent).
+**Voice profiles per Sub-Agent:** urgent (Safety), calm (Health, Companion), gentle (Reminder), firm (Behavior), formal (Caregiver Liaison).
 
 ---
 
-## 20. UI Layer (the `UI` block — "user will see their history")
+## 22. UI Layer  *(Action — dashboard renderer)*
 
-The patient and their family need a dashboard: medication intake, vitals, incident history.
+What the patient and family see: medication intake, vitals, incident history, live status.
 
 | Component | Recommendation |
 |---|---|
-| **Web framework** | **Next.js 15 (App Router)** for production polish, or **Streamlit** for hackathon-speed prototype. |
-| **State / real-time** | **Server-Sent Events** (one-way Backend → UI) — simpler than WebSockets and sufficient for live updates. WebSocket if you need duplex. |
-| **Charts** | **Recharts** or **Apache ECharts** for vitals time-series. |
-| **Voice in UI** | Web Audio API for the "talk to Guardian from your phone" path. |
-| **Auth** | **Passkeys (WebAuthn)** — this is a household-scale app. |
-| **Backend API client** | Auto-generated from FastAPI's OpenAPI schema (via `openapi-typescript`). |
-
-**Recommendation:** **Next.js frontend → FastAPI backend over SSE + REST, with Recharts for vitals.** If time is tight, **Streamlit** gets you a usable history dashboard in two hours.
+| Web framework | **Next.js 15 (App Router)** for production; **Streamlit** for hackathon-speed prototype |
+| State / real-time | **SSE** (Backend → UI) via `sse-starlette` |
+| Charts | **Recharts** or Apache ECharts for vitals |
+| Voice in UI | Web Audio API |
+| Auth | Passkeys (WebAuthn) |
+| API client | Auto-generated from FastAPI's OpenAPI |
 
 ---
 
-## 21. Wi-Fi Pose Detection (Stretch)
+## 23. Wi-Fi Pose Detection  *(Sensing, stretch)*
 
 | Component | Notes |
 |---|---|
-| **CSI extraction firmware** | **Nexmon CSI** (Broadcom chips) or **ESP32-CSI-Tool** (cheap, $5 board). |
-| **Pose / activity classification** | Custom model — start from **Wi-Pose** / **Person-in-WiFi** reference papers. No drop-in library exists yet. |
+| CSI extraction firmware | **ESP32-CSI-Tool** ($5) or **Nexmon CSI** (Broadcom) |
+| Pose classification | Custom — start from Wi-Pose / Person-in-WiFi papers |
 
-**Recommendation:** Use an **ESP32-CSI-Tool** for a *minimal* fall-vs-no-fall classifier. Skip full pose estimation for hackathon.
+For hackathon: minimal fall-vs-no-fall classifier feeding the **Safety Agent**.
 
 ---
 
-## 22. Synthetic Data & Demo Tooling
-
-You'll need realistic patient histories and emergency scenarios for the demo.
+## 24. Synthetic Data & Demo Tooling
 
 | Need | Module |
 |---|---|
-| Synthetic patient records | **Synthea** (MITRE) — generates FHIR-compatible synthetic medical histories. |
-| Synthetic voice scenarios | **XTTS-v2** to generate diverse patient voices saying scripted lines. |
-| Audio incident library | **Freesound** + AudioSet samples (falls, glass break, coughing). |
-| Scenario runner | Custom pytest harness that injects synthetic audio into the pipeline and asserts on agent actions. |
-
-**Recommendation:** **Synthea + XTTS for voices + a pytest scenario harness** so you can replay any demo deterministically.
+| Synthetic patient records | **Synthea** (MITRE), FHIR-compatible |
+| Synthetic voices | **XTTS-v2** to read scripted patient lines |
+| Audio incident library | **Freesound** + AudioSet samples |
+| Scenario runner | Custom pytest harness; inject audio + vital events, assert on agent intents |
 
 ---
 
-## 23. Observability & Ops
+## 25. Observability & Ops
 
 | Concern | Module |
 |---|---|
-| **Logs** | `loguru` (dev) → `structlog` + journald (prod) |
-| **Metrics** | Prometheus + Grafana, all local |
-| **LLM tracing** | **Langfuse** (self-hosted) or LangSmith |
-| **Process manager** | systemd units, one per service |
-| **Container runtime** | **Podman** (rootless) or Docker |
-
-**Recommendation:** **Langfuse self-hosted** is huge for debugging the agent loop. Don't skip it.
+| Logs | `loguru` (dev) → `structlog` + journald (prod) |
+| Metrics | Prometheus + Grafana (local) |
+| LLM + agent tracing | **Langfuse** (self-hosted) — *critical* for debugging the multi-agent loop |
+| Process manager | systemd, one unit per service |
+| Container runtime | **Podman** (rootless) or Docker |
 
 ---
 
-## 24. Privacy, Security, Compliance (PHIPA)
+## 26. Privacy, Security, Compliance (PHIPA)
 
 | Layer | Module |
 |---|---|
-| **Disk encryption** | LUKS (the whole device) |
-| **DB encryption** | SQLCipher (SQLite), `pgcrypto` (Postgres) |
-| **Secrets** | `pass` + GPG, or HashiCorp Vault if multi-user |
-| **Audit log** | Append-only `journald` + signed log chain |
-| **Network** | Local-only by default. **Tailscale** for caregiver remote access — encrypted, ephemeral keys, no public exposure. |
-| **Microphone kill switch** | Hardware switch on the mic array — non-negotiable for trust |
-
-**Recommendation:** Lead the demo with the **hardware mic kill switch** + show the SQLCipher-encrypted DB. The privacy story is the differentiator; make it visible.
+| Disk encryption | LUKS (whole device) |
+| DB encryption | SQLCipher (SQLite), `pgcrypto` (Postgres) |
+| Secrets | `pass` + GPG, or HashiCorp Vault |
+| Audit log | Append-only SQLite event log + signed log chain |
+| Network | Local-only by default; **Tailscale** for caregiver remote access |
+| Microphone kill switch | Hardware switch on the mic array — non-negotiable for trust |
 
 ---
 
 ## Recommended Hackathon Build Order
 
-1. **Day 1 AM** — Stand up the **Backend skeleton**: FastAPI + Uvicorn + SQLModel + Alembic, with a minimal `/health` and a stubbed `/events` SSE endpoint. Get vLLM + Llama 3.1 8B running on DGX. Wire up Pipecat (inside the Backend) with Silero VAD + Parakeet STT + Kokoro TTS. End-to-end "Hey Guardian, what time is it?" working.
-2. **Day 1 PM** — LangGraph agent + SQLModel patient profile + Twilio mock 911 + APScheduler for reminders. The fall-scenario E2E happy path through the Backend.
-3. **Day 2 AM** — Polar H10 → InfluxDB → `bio_marker` tool feeds vitals into agent context. Medical RAG with Qdrant + Meditron consult. Reminder events firing end-to-end via the scheduler.
-4. **Day 2 PM** — Next.js history UI hitting Backend over SSE, demo polish, second scenario (slow-burn arm pain → revisit-on-incident), record the demo video.
+1. **Day 1 AM** — Backend skeleton (FastAPI + SQLModel + Alembic). vLLM + Llama 3.1 8B up. Pipecat inside the Backend with Silero VAD + Parakeet STT + Kokoro TTS. "Hey Guardian" end-to-end.
+2. **Day 1 PM** — LangGraph **Orchestrator** with hybrid router. **Safety Agent** + **Companion Agent** as the first two subgraphs. The fall-scenario E2E with mock Twilio 911.
+3. **Day 2 AM** — Polar H10 → InfluxDB → personal baseline model + anomaly detector. **Health Agent** + **Reminder Agent**. APScheduler firing medication reminders. Qdrant + Meditron-7B for `clinical_consult`.
+4. **Day 2 PM** — **Behavior Agent** + **Caregiver Liaison** scaffolds, even if shallow. Next.js history UI on SSE. Record demo: fall scenario + slow-burn arm-pain scenario + missed-meds scenario.
 
-Stretch (post-hackathon): Riva, Wi-Fi CSI, SeamlessM4T for the multilingual scenario, NIM/TensorRT-LLM migration.
+Stretch: Riva, SeamlessM4T multilingual, Wi-Fi CSI fall classifier, NIM/TensorRT-LLM migration.
 
 ---
 
-## TL;DR Pick List (the version you put on a slide)
+## TL;DR Pick List (slide-ready)
 
 | Layer | Pick |
 |---|---|
 | Mic | ReSpeaker 6-Mic Array |
-| **Backend** | **FastAPI + Uvicorn + SQLModel + Alembic + Arq + APScheduler + sse-starlette** |
-| Wake word | openWakeWord |
-| VAD | Silero VAD |
-| STT | NVIDIA Parakeet-TDT (fallback: faster-whisper) |
+| Backend | FastAPI + Uvicorn + SQLModel + Alembic + Arq + APScheduler + sse-starlette |
+| Wake / VAD / STT | openWakeWord + Silero VAD + NVIDIA Parakeet-TDT |
 | Speaker ID | pyannote.audio |
-| Audio events | CLAP + YAMNet |
+| Audio events | YAMNet + CLAP |
 | LLM runtime | vLLM → NIM/TensorRT-LLM |
-| LLM model | Llama 3.1 8B + Meditron-7B (consult) |
-| Agent framework | LangGraph |
+| LLM models | Llama 3.1 8B (generalist) + Meditron-7B (clinical) + Phi-3.5-mini (risk classifier) |
+| **Orchestrator** | **LangGraph Supervisor + hybrid (rule + LLM) router + SQLite checkpointing** |
+| **Sub-Agents** | **6 LangGraph subgraphs (Safety / Health / Reminder / Companion / Behavior / Caregiver Liaison)** |
+| **Shared Tool Bus** | **Stateless Pydantic-typed Python tools in 4 buckets, gated per-agent** |
+| Reasoning modules | River (baselines) + PyOD (anomalies) + Phi-3.5-mini risk classifier + local RxNav (interactions) |
+| Medical RAG | Qdrant + NV-Embed-v2 + MedCPT |
 | Voice pipeline | Pipecat (inside Backend) |
 | Translation | SeamlessM4T v2 |
-| Vector DB | Qdrant |
-| Embeddings | NV-Embed-v2 + MedCPT |
+| Wearable | Polar H10 via `bleak` → InfluxDB |
 | Patient DB | SQLite + SQLCipher (via SQLModel) |
 | Time-series | InfluxDB 3 |
-| Wearable | Polar H10 via `bleak` |
-| TTS | Kokoro (hackathon) → Riva (prod) |
-| UI | Next.js + Recharts (or Streamlit for speed) |
-| External MCPs | Google Calendar, Spotify, Twilio, Toronto Open Data |
-| Emergency comms | Twilio |
+| TTS | Kokoro (hackathon) → Riva (prod); per-agent voice profiles |
+| UI | Next.js + Recharts (or Streamlit) over SSE |
+| Notification dispatcher | Tiered (whisper / nudge / alarm / call) over TTS + UI + Hue/Matter + Twilio |
+| External MCPs | Calendar, Spotify, Twilio, Toronto Open Data, Pharmacy, FHIR, Filesystem |
 | Observability | Langfuse + Prometheus + Grafana |
-| Privacy | SQLCipher + LUKS + hardware mic switch + Tailscale |
+| Privacy | SQLCipher + LUKS + hardware mic switch + Tailscale + signed audit log |
