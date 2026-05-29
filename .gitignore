@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+.env
+
+# Databases / data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+audio_dumps/
+*.wav
+*.mp3
+
+# Model artefacts
+models/
+*.onnx
+*.gguf
+*.bin
+*.safetensors
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+logs/
