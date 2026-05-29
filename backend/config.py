@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # LLM
     ollama_base_url: str = "http://localhost:11434"
-    llm_model_generalist: str = "llama3.1:8b-instruct-q4_K_M"
+    llm_model_generalist: str = "gemma:latest"
     llm_model_clinical: str = "meditron:7b"
     llm_model_classifier: str = "phi3.5:mini"
 

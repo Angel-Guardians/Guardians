@@ -4,34 +4,37 @@
 .PHONY: install seed migrate backend always-on workers ui test lint format demo-reset
 
 install:
-	pip install -e ".[ui,dev]"
+	uv sync --extra ui --extra dev
 
 seed:
-	guardian-seed
+	uv run guardian-seed
 
 migrate:
-	alembic upgrade head
+	uv run alembic upgrade head
 
 backend:
-	guardian-backend
+	uv run guardian-backend
 
 always-on:
-	guardian-always-on
+	uv run guardian-always-on
 
 workers:
-	guardian-workers
+	uv run guardian-workers
 
 ui:
-	streamlit run ui/app.py
+	uv run streamlit run ui/app.py
 
 test:
-	pytest
+	uv run pytest
 
 lint:
-	ruff check backend ui tests scripts
+	uv run ruff check backend ui tests scripts
 
 format:
-	ruff format backend ui tests scripts
+	uv run ruff format backend ui tests scripts
 
 demo-reset:
-	python scripts/demo_reset.py
+	uv run python scripts/demo_reset.py
+
+phase0:
+	uv run python scripts/phase0.py

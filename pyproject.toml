@@ -30,8 +30,8 @@ dependencies = [
     "numpy>=2.1",
     "faster-whisper>=1.1",
     "openwakeword>=0.6",
-    # TTS
-    "kokoro>=0.7",
+    # TTS (pyttsx3 = offline Windows SAPI; swap for kokoro/Riva in Phase 7)
+    "pyttsx3>=2.90",
     # Wearable
     "bleak>=0.22",
     # External integrations
