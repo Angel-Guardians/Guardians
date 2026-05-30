@@ -1,6 +1,4 @@
-"""The Shared Tool Bus.
+"""Tool layer: stub implementations + registry."""
+from backend.tools.registry import Tool, ToolRegistry, build_default_registry
 
-Four buckets: sensing, memory_reasoning, action, integrations. Every
-tool is a Pydantic-typed function. Buckets are organizational; gating
-is per-agent (see backend.agents.<name>.allowed_tools).
-"""
+__all__ = ["Tool", "ToolRegistry", "build_default_registry"]

@@ -138,3 +138,23 @@ class HandoffEvent(GuardianEvent):
     to_agent: str
     reason: str
     new_severity: SeverityTier | None = None
+
+
+# ---------------------------------------------------------------------------
+# Conversational turn events (emitted by POST /turn -> GuardianAgent)
+# ---------------------------------------------------------------------------
+
+
+class TranscriptEvent(GuardianEvent):
+    """A patient utterance entering the system (shows in the Live transcript)."""
+
+    type: Literal["transcript"] = "transcript"
+    text: str
+
+
+class AgentReplyEvent(GuardianEvent):
+    """Guardian's spoken reply after a turn completes."""
+
+    type: Literal["agent_reply"] = "agent_reply"
+    agent: str
+    text: str

@@ -1,31 +1,26 @@
 [project]
 name = "guardian"
-version = "0.1.0"
-description = "Home Emergency AI Companion - always-on, fully local"
+version = "0.2.0"
+description = "Home Emergency AI Companion — multi-agent, provider-neutral LLM, runs on OpenAI cloud or a local DGX Spark"
 requires-python = ">=3.11"
 readme = "README.md"
 license = { file = "LICENSE" }
 
 dependencies = [
-    # Backend
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
-    "sse-starlette>=2.1",
-    "pydantic>=2.9",
-    "pydantic-settings>=2.6",
-    # Persistence
-    "sqlmodel>=0.0.22",
-    "psycopg[binary]>=3.2",
-    "alembic>=1.13",
-    "influxdb-client>=1.46",
-    # Agents / LLM
-    "langgraph>=0.2",
-    "langchain-ollama>=0.2",
-    # Scheduling / workers
-    "apscheduler>=3.10",
-    "arq>=0.26",
-    # Observability
+    # --- Brain (provider-neutral LLM + orchestration + tracing) ---
+    "openai>=1.0",          # the ONLY vendor SDK, confined to backend/llm/openai_compatible.py
+    "langgraph>=0.2",       # supervisor -> 6 specialists StateGraph
+    "langsmith>=0.2",       # optional tracing (env-gated by LANGSMITH_TRACING)
+    "python-dotenv>=1.0",
     "loguru>=0.7",
+    # --- Spine (API + DB + SSE + config) ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=2.1",
+    "sqlmodel>=0.0.22",
+    "pydantic-settings>=2.5",
+    "psycopg[binary]>=3.2",  # Postgres driver (only needed when DATABASE_URL points at Postgres)
+    "apscheduler>=3.10",     # medication reminder scheduling
     # Numerics (shared)
     "numpy>=2.1",
     # Wearable
@@ -50,28 +45,26 @@ audio = [
     "openwakeword>=0.6",
     "kokoro>=0.7",
 ]
-rag = [
-    "qdrant-client>=1.12",
-    "sentence-transformers>=3.2",
-]
 # MyCareCompass portal automation (LifeLabs has no public patient API).
 crawler = [
     "playwright>=1.47",
 ]
 dev = [
     "pytest>=8.3",
-    "pytest-asyncio>=0.24",
-    "testcontainers[postgres]>=4.8",
     "ruff>=0.7",
-    "mypy>=1.13",
     "ipython>=8.28",
+    "httpx>=0.27",           # TestClient
+]
+# Optional RAG upgrade: real embeddings + pgvector. Keyword recall works without these.
+rag = [
+    "pgvector>=0.3",
+    "sentence-transformers>=3.0",
 ]
 
 [project.scripts]
 guardian-backend = "backend.main:run"
-guardian-always-on = "backend.always_on.runner:run"
-guardian-workers = "backend.workers.runner:run"
-guardian-seed = "scripts.seed_patient:main"
+guardian-phase0 = "scripts.phase0:main"
+guardian-seed = "backend.db.seed:seed_all"
 
 [build-system]
 requires = ["hatchling"]
@@ -92,8 +85,3 @@ ignore = ["E501"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-warn_unreachable = true

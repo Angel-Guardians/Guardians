@@ -63,7 +63,15 @@ export const api = {
       body: JSON.stringify(profile),
     }),
 
-  // TODO(backend): GET /vitals?kind=&since= not implemented yet.
+  // Send one conversational turn to Guardian. The reply + routing + tool calls
+  // are also streamed onto GET /events/sse, so the Live page updates in real time.
+  turn: (text: string, patientId: number = DEFAULT_PATIENT_ID) =>
+    sendJson<{ route: string; reply: string; tool_calls: Record<string, unknown>[] }>(
+      "/turn/",
+      { method: "POST", body: JSON.stringify({ text, patient_id: patientId }) },
+    ),
+
+  // Implemented: GET /vitals?kind=&since= (served from the Vital table; watch feeds it).
   getVitals: (kind: VitalKind, since = "24h") =>
     getJson<VitalSeries>(`/vitals?kind=${kind}&since=${since}`),
 

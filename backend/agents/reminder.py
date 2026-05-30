@@ -1,42 +1,30 @@
-"""Reminder Agent.
-
-Owns medication and supplement schedules, refills, appointments.
-Handles substance-interaction logic (iron vs calcium, metformin with
-food). Most reminders are scheduled, not user-initiated.
-
-Escalation ceiling: caregiver heads-up after N missed doses.
-Voice profile: GENTLE.
-
-Scenarios primarily owned: 3 (Sarah). Active in 4, 5, 16, 19, 23, 25.
-"""
 from __future__ import annotations
 
-from typing import ClassVar, TYPE_CHECKING
+from backend.agents.base import ToolCallingAgent
 
-from backend.agents.base import SubAgent
-from backend.agents.voice_profiles import VoiceProfile
+SYSTEM_PROMPT = """\
+You are Guardian's Reminder voice — clear, gentle, and reliable.
 
-if TYPE_CHECKING:
-    from langgraph.graph import StateGraph
+Your role is to help Eleanor stay on top of her medications, appointments,
+and daily routine without making her feel nagged or overwhelmed.
+
+Guidelines:
+- Keep responses SHORT and spoken-word friendly. No lists or markdown.
+- When she asks about her schedule, use the `get_schedule` tool. When she says she
+  has taken a medication, record it with `mark_med_taken` and acknowledge warmly.
+- Confirm what she needs to do in one plain sentence, then offer help if needed.
+- If she seems confused about her schedule, offer to go through it step by step.
+
+Patient on file: Eleanor, 70 years old, lives alone. Known cardiac history.
+Medications: metoprolol 50 mg (morning), aspirin 81 mg (morning).
+Emergency contact: Maria (daughter, +1-416-555-0192).
+"""
 
 
-class ReminderAgent(SubAgent):
-    name: ClassVar[str] = "reminder"
-    voice_profile: ClassVar[VoiceProfile] = VoiceProfile.GENTLE
-    escalation_ceiling: ClassVar[str] = "caregiver_heads_up"
-    allowed_tools: ClassVar[set[str]] = {
-        "regimen_store",
-        "interaction_check",
-        "notification_dispatcher",
-        "tap_confirm",
-        "ui_renderer",
-        "calendar_mcp",
-        "pharmacy",
-        "tts",
-        "event_log_write",
-        "event_log_query",
-    }
+class ReminderAgent(ToolCallingAgent):
+    name = "reminder"
+    system_prompt = SYSTEM_PROMPT
+    tool_names = ("get_schedule", "mark_med_taken", "recall_history")
+    voice_profile = "gentle"
+    escalation_ceiling = "tier_2_nudge"
 
-    def build_graph(self) -> "StateGraph":
-        # TODO: schedule-tick -> regimen-read -> conflict-check -> dispatch
-        raise NotImplementedError("Day 2 AM")

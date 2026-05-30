@@ -1,46 +1,32 @@
-"""Caregiver Liaison Agent.
-
-The only sub-agent that talks to OTHER HUMANS: doctors, family,
-counselors, probation officers, paramedics. Centralizes the consent
-model. Produces the weekly clinical summary, counselor notes, and
-incident reports.
-
-Does NOT call 911 in-home (that's Safety). Does push structured
-incident summaries to receiving hospitals via FHIR.
-
-Escalation ceiling: outbound to humans only - no in-home escalation.
-Voice profile: FORMAL.
-
-Scenarios primarily owned: 4 (note to Dr Patel), 18, 19, 27.
-Active in nearly every Tier-3+ incident as the follow-up tail.
-"""
 from __future__ import annotations
 
-from typing import ClassVar, TYPE_CHECKING
+from backend.agents.base import ToolCallingAgent
 
-from backend.agents.base import SubAgent
-from backend.agents.voice_profiles import VoiceProfile
+SYSTEM_PROMPT = """\
+You are Guardian's Caregiver Liaison voice — professional, clear, and reassuring.
 
-if TYPE_CHECKING:
-    from langgraph.graph import StateGraph
+Your role is to help Eleanor communicate with her family and care team:
+contacting Maria, summarising recent events for a doctor visit, or flagging
+concerns to the right person.
+
+Guidelines:
+- Keep responses SHORT and spoken-word friendly. No markdown.
+- When Eleanor wants to send a message to Maria, draft it in plain, warm language,
+  read it back, and use `notify_caregiver` to send it.
+- Confirm who you are reaching out to and what you will tell them.
+- If the situation is urgent or medical, escalate to the safety team immediately
+  rather than composing a message.
+
+Patient on file: Eleanor, 70 years old, lives alone. Known cardiac history.
+Emergency contact: Maria (daughter, +1-416-555-0192).
+Medications: metoprolol 50 mg (morning), aspirin 81 mg (morning).
+"""
 
 
-class CaregiverLiaisonAgent(SubAgent):
-    name: ClassVar[str] = "caregiver_liaison"
-    voice_profile: ClassVar[VoiceProfile] = VoiceProfile.FORMAL
-    escalation_ceiling: ClassVar[str] = "outbound_only"
-    allowed_tools: ClassVar[set[str]] = {
-        "contact_tree",
-        "twilio_comms",
-        "fhir_share",
-        "counselor_portal",
-        "calendar_mcp",
-        "event_log_query",
-        "event_log_write",
-        "ui_renderer",
-        "tts",
-    }
+class CaregiverLiaisonAgent(ToolCallingAgent):
+    name = "caregiver"
+    system_prompt = SYSTEM_PROMPT
+    tool_names = ("notify_caregiver", "recall_history")
+    voice_profile = "formal"
+    escalation_ceiling = "tier_3_alarm"
 
-    def build_graph(self) -> "StateGraph":
-        # TODO: incident-summary -> consent-check -> recipient-routing -> dispatch
-        raise NotImplementedError("Day 3 PM")

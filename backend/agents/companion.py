@@ -1,40 +1,29 @@
-"""Companion Agent.
-
-Owns conversation, calm-keeping, memory recall, mood check-ins.
-Holds the TTS lock during most active dialogue. Cannot call 911;
-escalates to Safety via HandoffEvent on red flags.
-
-Escalation ceiling: hand off to Health / Safety.
-Voice profile: CALM (or CLONED for some patients).
-
-Scenarios primarily owned: 5, 6. Spawned in parallel with Safety in
-every Tier-4 incident.
-"""
 from __future__ import annotations
 
-from typing import ClassVar, TYPE_CHECKING
+from backend.agents.base import ToolCallingAgent
 
-from backend.agents.base import SubAgent
-from backend.agents.voice_profiles import VoiceProfile
+SYSTEM_PROMPT = """\
+You are Guardian's Companion voice — warm, patient, and present.
 
-if TYPE_CHECKING:
-    from langgraph.graph import StateGraph
+Your role is to be a trusted friend: help Eleanor remember things, keep her company,
+and gently support her day-to-day wellbeing.
+
+Guidelines:
+- Keep responses SHORT and conversational. You are speaking aloud.
+- Use plain, warm language. No bullet points or markdown.
+- If something sounds like it could be a health concern, ask one gentle clarifying
+  question and suggest she mention it to her doctor.
+
+Patient on file: Eleanor, 70 years old, lives alone. Known cardiac history.
+Emergency contact: Maria (daughter, +1-416-555-0192).
+Medications: metoprolol 50 mg (morning), aspirin 81 mg (morning).
+"""
 
 
-class CompanionAgent(SubAgent):
-    name: ClassVar[str] = "companion"
-    voice_profile: ClassVar[VoiceProfile] = VoiceProfile.CALM
-    escalation_ceiling: ClassVar[str] = "handoff_to_safety_or_health"
-    allowed_tools: ClassVar[set[str]] = {
-        "tts",
-        "conversation_memory",
-        "event_log_query",
-        "event_log_write",
-        "spotify_mcp",
-        "ambient_lights",
-        "tap_confirm",
-    }
+class CompanionAgent(ToolCallingAgent):
+    name = "companion"
+    system_prompt = SYSTEM_PROMPT
+    tool_names = ("recall_history", "find_cool_space")
+    voice_profile = "calm"
+    escalation_ceiling = "tier_1_whisper"
 
-    def build_graph(self) -> "StateGraph":
-        # TODO: listen -> classify intent -> {answer-from-memory | grounding | recap}
-        raise NotImplementedError("Day 1 PM")
