@@ -1,38 +1,57 @@
 """Tool registry.
 
-Tools register themselves via @register_tool. Sub-agents look up tools
-by name and are gated by their allowed_tools set.
+A tool is a `ToolSpec` (advertised to the model) bound to a plain Python callable
+that returns a JSON-serialisable dict. For the hackathon every callable is a stub
+returning a canned response; swapping a stub for a real integration (Twilio, FHIR,
+911 dispatch) is a one-function change with no impact on agents or the LLM layer.
 """
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
-from backend.tools.decorators import ToolNotAllowed
+from loguru import logger
+
+from backend.llm.base import ToolSpec
+
+ToolFn = Callable[..., dict[str, Any]]
 
 
-_REGISTRY: dict[str, Callable[..., Awaitable[Any]]] = {}
+@dataclass
+class Tool:
+    spec: ToolSpec
+    fn: ToolFn
 
 
-def register_tool(name: str) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
-    """Decorator: make a tool callable by name through the registry."""
+class ToolRegistry:
+    def __init__(self) -> None:
+        self._tools: dict[str, Tool] = {}
 
-    def decorator(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
-        if name in _REGISTRY:
-            raise ValueError(f"tool already registered: {name}")
-        _REGISTRY[name] = func
-        return func
+    def register(self, spec: ToolSpec, fn: ToolFn) -> None:
+        self._tools[spec.name] = Tool(spec, fn)
 
-    return decorator
+    def spec(self, name: str) -> ToolSpec:
+        return self._tools[name].spec
+
+    def specs(self, names: tuple[str, ...]) -> list[ToolSpec]:
+        return [self._tools[n].spec for n in names if n in self._tools]
+
+    def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if name not in self._tools:
+            logger.warning(f"[tool] unknown tool requested: {name}")
+            return {"error": f"unknown tool: {name}"}
+        logger.info(f"[tool] -> {name}({arguments})")
+        result = self._tools[name].fn(**arguments)
+        logger.info(f"[tool] <- {name} {result}")
+        return result
 
 
-def get_tool(name: str, *, allowed: set[str] | None = None) -> Callable[..., Awaitable[Any]]:
-    if allowed is not None and name not in allowed:
-        raise ToolNotAllowed(f"tool {name!r} is not in the allowed set")
-    if name not in _REGISTRY:
-        raise KeyError(f"unknown tool: {name}")
-    return _REGISTRY[name]
+def build_default_registry() -> ToolRegistry:
+    """Register every stub. Imported lazily to avoid circulars."""
+    from backend.tools import civic, emergency, health, memory, reminder
 
-
-def list_tools() -> list[str]:
-    return sorted(_REGISTRY)
+    registry = ToolRegistry()
+    for module in (emergency, health, reminder, civic, memory):
+        module.register(registry)
+    return registry

@@ -13,12 +13,21 @@ from collections.abc import Iterator
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
-from testcontainers.postgres import PostgresContainer
 
 
 @pytest.fixture(scope="session")
 def postgres_url() -> Iterator[str]:
-    """Spin up an ephemeral Postgres for the whole test session."""
+    """Spin up an ephemeral Postgres for the whole test session.
+
+    Only the Postgres-backed scenario tests need this. `testcontainers` is an
+    optional extra (and needs Docker running), so we import it lazily and skip —
+    rather than crash collection — when it's unavailable. The smoke and unit
+    tests don't touch this fixture and run with no extra setup.
+    """
+    try:
+        from testcontainers.postgres import PostgresContainer
+    except ModuleNotFoundError:
+        pytest.skip("testcontainers not installed; Postgres-backed tests skipped")
     with PostgresContainer("postgres:17", driver="psycopg") as pg:
         yield pg.get_connection_url()
 

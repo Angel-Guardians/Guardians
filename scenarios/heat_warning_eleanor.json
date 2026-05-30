@@ -1,0 +1,23 @@
+{
+  "scenario_id": "heat_warning_eleanor",
+  "title": "Heat warning — isolated senior (HERO)",
+  "persona": {
+    "name": "Eleanor",
+    "age": 70,
+    "conditions": ["cardiac history"],
+    "consent_mode": "family_first",
+    "address": "Downtown Toronto (near Wellesley)",
+    "lat": 43.6655,
+    "lon": -79.3835,
+    "caregiver": "daughter (Maria)"
+  },
+  "context": {"heat_warning": true},
+  "timeline": [
+    {"event": {"type": "environment", "data": {"ambient_temp_c": 28}}},
+    {"event": {"type": "activity", "data": {"movement_level": "normal", "water_intake_hours_ago": 1}}},
+    {"event": {"type": "environment", "data": {"ambient_temp_c": 31}}},
+    {"event": {"type": "activity", "data": {"movement_level": "low", "water_intake_hours_ago": 4}}},
+    {"event": {"type": "voice", "data": {"transcript": "It's so hot in here, I feel a bit dizzy.", "detected_affect": "distress", "affect_confidence": 0.82, "heart_rate": 92}}},
+    {"event": {"type": "tap_confirm", "data": {"confirmed": true}}}
+  ]
+}

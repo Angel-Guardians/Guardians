@@ -1,0 +1,22 @@
+{
+  "scenario_id": "silent_morning",
+  "title": "Silent morning — routine break (BACKUP)",
+  "persona": {
+    "name": "Eleanor",
+    "age": 70,
+    "conditions": ["cardiac history"],
+    "consent_mode": "family_first",
+    "address": "Downtown Toronto (near Wellesley)",
+    "lat": 43.6655,
+    "lon": -79.3835,
+    "caregiver": "daughter (Maria)"
+  },
+  "context": {"heat_warning": false},
+  "timeline": [
+    {"event": {"type": "activity", "data": {"movement_level": "none"}}},
+    {"event": {"type": "environment", "data": {"ambient_temp_c": 22}}},
+    {"event": {"type": "activity", "data": {"movement_level": "low", "water_intake_hours_ago": 14}}},
+    {"event": {"type": "voice", "data": {"transcript": "", "detected_affect": "absent", "affect_confidence": 0.6}}},
+    {"event": {"type": "tap_confirm", "data": {"confirmed": false}}}
+  ]
+}

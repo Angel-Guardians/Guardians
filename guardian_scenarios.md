@@ -1,6 +1,12 @@
 # Guardian — Components & Scenario Playbook
 
-Companion document to `guardian_architecture.md`. This file describes each component in plain language and walks through twenty-seven scenarios end-to-end, showing which sub-agents and tools are invoked and in what order.
+> **⚠ Idea bank, not current demo script.** These 27 scenarios use older persona
+> names (Margaret/Sarah); the current build standardizes on **Eleanor** (see
+> `data/personas/eleanor.md`). The scenarios actually wired for the demo live in
+> `scenarios/*.json`. Mine this doc for scenario ideas, but treat Eleanor as the
+> canonical patient.
+
+Companion document to `ARCHITECTURE.md`. This file describes each component in plain language and walks through twenty-seven scenarios end-to-end, showing which sub-agents and tools are invoked and in what order.
 
 ---
 
