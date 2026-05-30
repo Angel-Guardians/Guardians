@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
     log_level: str = "INFO"
+    # Frontend dev origins allowed by CORS
+    cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # CPU pinning
     always_on_cpu_cores: str = "0-5"

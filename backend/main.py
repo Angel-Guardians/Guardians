@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import events_sse, patient
 from backend.config import settings
@@ -41,6 +42,14 @@ def create_app() -> FastAPI:
         version="0.1.0",
         description="Home Emergency AI Companion",
         lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # Routers

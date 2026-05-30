@@ -25,13 +25,8 @@ dependencies = [
     "arq>=0.26",
     # Observability
     "loguru>=0.7",
-    # Audio (always-on tier)
-    "sounddevice>=0.5",
+    # Numerics (shared)
     "numpy>=2.1",
-    "faster-whisper>=1.1",
-    "openwakeword>=0.6",
-    # TTS
-    "kokoro>=0.7",
     # Wearable
     "bleak>=0.22",
     # External integrations
@@ -43,9 +38,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-frontend = [
-    "streamlit>=1.39",
-    "plotly>=5.24",
+# Always-on audio tier (STT/wake-word/TTS). Kept optional because kokoro
+# currently constrains numpy and its misaki dep has no wheel on some platforms.
+audio = [
+    "sounddevice>=0.5",
+    "faster-whisper>=1.1",
+    "openwakeword>=0.6",
+    "kokoro>=0.7",
 ]
 rag = [
     "qdrant-client>=1.12",
