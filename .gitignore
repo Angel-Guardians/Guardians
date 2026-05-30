@@ -15,10 +15,6 @@ dist/
 .env
 
 # Databases / data
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
 data/
 audio_dumps/
 *.wav

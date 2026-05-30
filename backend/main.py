@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import events_sse, patient
 from backend.config import settings
@@ -29,6 +30,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       - LLM client (Ollama)
     """
     configure_logging()
+    from backend.db.session import init_db
+
+    init_db()
+    from backend.db.seed import seed_if_empty
+
+    seed_if_empty()
     app.state.event_bus = EventBus()
     # TODO: start orchestrator, scheduler, subscribe sub-agents to bus
     yield
@@ -43,6 +50,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # Routers
     app.include_router(patient.router, prefix="/patient", tags=["patient"])
     app.include_router(events_sse.router, prefix="/events", tags=["events"])
@@ -50,6 +65,10 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/ping")
+    async def ping() -> dict[str, str]:
+        return {"message": "pong"}
 
     return app
 

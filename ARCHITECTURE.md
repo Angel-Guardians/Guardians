@@ -197,7 +197,7 @@ A **real-time loop** (Pipecat audio pipeline: edge VAD → STT → Orchestrator 
 │                               ▼                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │  Storage                                                           │  │
-│  │  Patient profile + consent matrix (SQLite + SQLCipher)              │  │
+│  │  Patient profile + consent matrix (Postgres + pgcrypto/TLS)         │  │
 │  │  Event Log  (append-only, content-hash chain — the source of truth) │  │
 │  │  Vitals time-series (InfluxDB 3)                                    │  │
 │  │  Conversation memory (in-process now, Qdrant nightly summaries)     │  │
@@ -302,8 +302,8 @@ Every Phase 0–3 pick is a **strict subset** of the production stack — swappa
 |---|---|---|
 | vLLM | NIM + TensorRT-LLM | OpenAI-compatible HTTP |
 | Kokoro TTS | NVIDIA Riva | Pipecat TTSService |
-| Streamlit | Next.js + SSE | Backend REST + SSE |
-| SQLite | SQLite + SQLCipher | Connection string |
+| Next.js + SSE | Next.js + SSE | Backend REST + SSE |
+| Postgres | Postgres + pgcrypto/TLS | Connection string |
 | faster-whisper | Parakeet-TDT | Pipecat STTService |
 | In-process asyncio.Queue | NATS | `event_bus.publish()` |
 
@@ -359,7 +359,7 @@ In-process short-term (per-incident, low latency, lost on restart) + Qdrant long
 
 ### Where Personal Baseline lives
 
-Two-tier: **streaming stats** (River, online) for per-event comparison, and **daily-aggregated baselines** (batch job into the Reasoning Modules' SQLite) for slow-changing patterns like Frank's sundowning window. Both are derived from the Event Log.
+Two-tier: **streaming stats** (River, online) for per-event comparison, and **daily-aggregated baselines** (batch job into the Reasoning Modules' Postgres tables) for slow-changing patterns like Frank's sundowning window. Both are derived from the Event Log.
 
 ---
 
@@ -430,7 +430,7 @@ These are not big rewrites — they are clarifications. The other documents are 
 | **4** | Health Agent. Slow-time path (nightly Behavior-style jobs). Medical RAG. Anomaly Detector. Differential diagnosis becomes a Health Agent capability. |
 | **5** | Behavior + Caregiver Liaison. **Consent matrix** lights up. Real Twilio + FHIR. Cross-agent handoff fully implemented. |
 | **6** | Always-on processes formally separated from on-demand processes (CPU-pinned vs. GPU-bound). Pipecat split: edge stages (mic, VAD, STT) in always-on, LLM + TTS stages in on-demand. Audio event detection live. |
-| **7** | PHIPA hardening across the board. SQLCipher, signed Event Log chain, hardware mic switch, Tailscale. |
+| **7** | PHIPA hardening across the board. Postgres pgcrypto + TLS + disk encryption (LUKS), signed Event Log chain, hardware mic switch, Tailscale. |
 | **8** | Specialized capabilities slot into the existing Tool Bus — no architectural change required (this is the test of a good architecture). |
 | **9** | New sensing modalities (Wi-Fi CSI, environmental mesh) join the Sensing bucket of the Tool Bus. Same architecture. |
 

@@ -110,7 +110,7 @@ class Incident(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Vitals - kept here for SQLite-only deployments; InfluxDB is the prod store
+# Vitals - relational fallback for dev/queries; InfluxDB is the prod time-series store
 # ---------------------------------------------------------------------------
 
 

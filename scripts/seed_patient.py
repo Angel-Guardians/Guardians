@@ -7,16 +7,12 @@ scenarios assume. Idempotent: safe to re-run.
 """
 from __future__ import annotations
 
+from backend.db.seed import seed_all
+
 
 def main() -> None:
-    """Populate Patient + EmergencyContact + Medication + ConsentMatrix."""
-    # TODO:
-    #   - open a session
-    #   - upsert Eleanor (cardiac history, daughter Maria as primary contact)
-    #   - upsert Margaret (hypertension, T2 diabetes, complex med regimen)
-    #   - upsert Sarah (healthy, iron-deficient, workout-day logic)
-    #   - default ConsentMatrix entries for each
-    raise NotImplementedError
+    seed_all()
+    print("Seed complete.")
 
 
 if __name__ == "__main__":

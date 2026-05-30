@@ -4,7 +4,7 @@
 
 All workloads live on **the DGX Spark** — no separate edge hardware. Always-on services (wake word, VAD, STT, audio event classification, sensor poll, scheduler) run in **CPU-pinned background processes** on the Grace ARM cores. The Llama 3.1 8B agent + Kokoro TTS bind to the **Blackwell GPU** on demand.
 
-**"Production-quality" here = polished, defensible, repeatable in front of judges.** Real PHIPA hardening (SQLCipher, signed audit chain, mic kill switch, Tailscale, FHIR auth) is post-hackathon Phase 7 in [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md). The demo proves the concept and the architecture; deployment is a separate sprint.
+**"Production-quality" here = polished, defensible, repeatable in front of judges.** Real PHIPA hardening (pgcrypto + TLS, signed audit chain, mic kill switch, Tailscale, FHIR auth) is post-hackathon Phase 7 in [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md). The demo proves the concept and the architecture; deployment is a separate sprint.
 
 ---
 
@@ -94,7 +94,7 @@ If Llama 3.1 8B isn't pulled yet, do it now. Verify free VRAM ≥ 6GB with `nvid
 **Owner:** backend person.
 
 - FastAPI app on `localhost:8000`
-- SQLite + SQLModel; `alembic init backend/db/migrations`
+- Postgres + SQLModel (`docker compose up -d postgres`); `alembic init backend/db/migrations`
 - `Patient` model: name, age, conditions, meds, allergies, emergency contacts
 - Seed `Eleanor, 70, cardiac history, lives alone` + daughter Maria as primary contact
 - `GET /patient/{id}` returns the profile
@@ -105,7 +105,7 @@ If Llama 3.1 8B isn't pulled yet, do it now. Verify free VRAM ≥ 6GB with `nvid
 **Owner:** agent person.
 
 - `agents/guardian.py`: one LangGraph `StateGraph`
-- Tool 1: `get_patient_profile()` → reads from SQLite
+- Tool 1: `get_patient_profile()` → reads from Postgres
 - Tool 2: `call_911_mock(summary: str)` → prints to console + writes `Incident` row
 - System prompt teaches the agent to use both tools when emergency keywords appear
 - Acceptance: feeding "I fell" produces a structured emergency response that names Eleanor and her cardiac history
@@ -207,7 +207,7 @@ If Llama 3.1 8B isn't pulled yet, do it now. Verify free VRAM ≥ 6GB with `nvid
 **Owner:** integrations person.
 
 - `always_on/wearable.py`: `bleak` BLE client reads Polar H10 HR characteristic
-- Streams to InfluxDB (or just a `Vital(ts, type, value, source)` SQLite table for speed)
+- Streams to InfluxDB (or just a `Vital(ts, type, value, source)` Postgres table for speed)
 - `tools/sensing/bio_marker.py`: returns latest HR for a window
 - Acceptance: putting on the chest strap surfaces HR in the system within 2 seconds; HR is queryable via the tool
 
@@ -282,7 +282,7 @@ If Llama 3.1 8B isn't pulled yet, do it now. Verify free VRAM ≥ 6GB with `nvid
 
 **Owner:** agent person.
 
-- `tools/memory_reasoning/personal_baseline.py`: rolling mean and stddev per vital per time-of-day, stored in SQLite, updated nightly via an Arq worker stub
+- `tools/memory_reasoning/personal_baseline.py`: rolling mean and stddev per vital per time-of-day, stored in Postgres, updated nightly via an Arq worker stub
 - `tools/memory_reasoning/anomaly_detector.py`: simple z-score threshold (PyOD IsolationForest is nicer but takes longer to wire)
 - Acceptance: a manually-injected HR of 130 (when baseline is 60) classifies as a Tier 2 anomaly
 
@@ -438,7 +438,7 @@ What's NOT in scope for the hackathon (each is mapped to a later Phase in [`DEVE
 
 | Capability | Why it's deferred | Phase |
 |---|---|---|
-| SQLCipher (DB encryption) | Phase 1 SQLite is plaintext for dev speed | Phase 7 |
+| pgcrypto + TLS (DB encryption) | Phase 1 Postgres is plaintext for dev speed | Phase 7 |
 | LUKS disk encryption | Requires re-imaging the DGX | Phase 7 |
 | Tamper-evident audit chain | Append-only log is there; hash chain is not | Phase 7 |
 | Hardware mic kill switch | Requires hardware mod to the ReSpeaker | Phase 7 |
@@ -451,7 +451,7 @@ What's NOT in scope for the hackathon (each is mapped to a later Phase in [`DEVE
 | Health Agent medical RAG (Meditron + Qdrant) | Health Agent is stubbed; clinical consult is mocked | Phase 4 |
 | Real 911 dispatch | Real 911 requires NENA i3 / CAD integration | Post-Phase-9 |
 
-When a judge asks "is this PHIPA-ready?" — answer honestly: *"The architecture is PHIPA-shaped from the ground up — consent matrix, audit log, local-only inference, encryption-friendly storage layout. Hardening (SQLCipher, signed audit chain, hardware kill switch, Tailscale, hardware-rooted attestation) is the next eight-week sprint after this hackathon. The phased plan in DEVELOPMENT_PLAN.md spells it out."*
+When a judge asks "is this PHIPA-ready?" — answer honestly: *"The architecture is PHIPA-shaped from the ground up — consent matrix, audit log, local-only inference, encryption-friendly storage layout. Hardening (pgcrypto + TLS, signed audit chain, hardware kill switch, Tailscale, hardware-rooted attestation) is the next eight-week sprint after this hackathon. The phased plan in DEVELOPMENT_PLAN.md spells it out."*
 
 ---
 

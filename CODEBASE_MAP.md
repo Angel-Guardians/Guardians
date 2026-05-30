@@ -58,9 +58,12 @@ guardian/
 │   └── workers/                # Arq workers (slow-time path)
 │       └── runner.py
 │
-├── frontend/                   # Streamlit (hackathon); Next.js (production)
-│   ├── app.py                  # Streamlit entry
-│   └── pages/                  # Multi-page Streamlit app
+├── frontend/                   # Next.js 16 (App Router) + Tailwind + shadcn/ui
+│   └── src/
+│       ├── app/                # Routes: / (Overview), /live, /vitals, /reminders
+│       ├── components/         # Sidebar + shadcn/ui primitives
+│       ├── hooks/              # useEventStream (SSE -> /events/sse)
+│       └── lib/                # api.ts (typed fetch client), types.ts
 │
 ├── scripts/                    # One-shot CLI helpers
 │   ├── seed_patient.py         # Seed Eleanor + Margaret + Sarah profiles

@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     llm_model_classifier: str = "phi3.5:mini"
 
     # Storage
-    database_url: str = "sqlite:///./guardian.db"
+    database_url: str = "postgresql+psycopg://guardian:guardian@localhost:5432/guardian"
     influxdb_url: str = "http://localhost:8086"
     influxdb_token: str = ""
     influxdb_org: str = "guardian"
@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
     log_level: str = "INFO"
+    # Frontend dev origins allowed by CORS
+    cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # CPU pinning
     always_on_cpu_cores: str = "0-5"
