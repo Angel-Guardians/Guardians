@@ -84,7 +84,7 @@ export function ProfileCorner() {
           {label}
         </p>
         <p className="text-xs text-muted-foreground transition-colors group-hover:text-foreground/70">
-          {active ? "Editing profile" : "Patient profile"}
+          {active ? "Viewing profile" : "Patient profile"}
         </p>
       </div>
     </Link>

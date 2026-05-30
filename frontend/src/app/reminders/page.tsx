@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,25 +61,37 @@ export default function RemindersPage() {
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Reminders</h1>
-        <p className="text-muted-foreground">Today&apos;s medications and check-ins</p>
-      </header>
+  const takenCount =
+    state.status === "ready" ? state.meds.filter((m) => m.taken).length : 0;
+  const totalCount = state.status === "ready" ? state.meds.length : 0;
 
-      <Card className="mx-auto max-w-2xl">
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title="Reminders"
+        description="Today's medication schedule. Confirm each dose when taken."
+        action={
+          state.status === "ready" && totalCount > 0 ? (
+            <Badge variant="secondary">
+              {takenCount}/{totalCount} confirmed
+            </Badge>
+          ) : null
+        }
+      />
+
+      <Card className="mx-auto max-w-2xl rounded-2xl shadow-sm">
         <CardHeader>
-          <CardTitle>Today&apos;s Schedule</CardTitle>
+          <CardTitle>Today&apos;s schedule</CardTitle>
         </CardHeader>
         <CardContent>
           {state.status === "ready" && state.meds.length > 0 ? (
             <ul className="divide-y divide-border">
               {state.meds.map((med) => (
-                <li key={med.id} className="flex items-center justify-between gap-4 py-3">
+                <li key={med.id} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
                   <div className="space-y-0.5">
                     <p className="font-medium">
-                      {med.name} <span className="text-muted-foreground">{med.dose}</span>
+                      {med.name}{" "}
+                      <span className="font-normal text-muted-foreground">{med.dose}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">{fmtTime(med.scheduledFor)}</p>
                   </div>
@@ -98,7 +111,7 @@ export default function RemindersPage() {
               ))}
             </ul>
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="py-12 text-center text-sm text-muted-foreground">
               Today&apos;s reminders will appear here once the schedule is configured.
             </p>
           )}

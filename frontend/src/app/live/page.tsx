@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -36,7 +37,6 @@ function fmtTime(ts: string) {
 export default function LivePage() {
   const { events, status } = useEventStream();
 
-  // Transcript = the running text of transcript-kind events, oldest first.
   const transcript = useMemo(
     () =>
       [...events]
@@ -48,23 +48,21 @@ export default function LivePage() {
   );
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Live</h1>
-          <p className="text-muted-foreground">Event stream + active transcript</p>
-        </div>
-        <StatusBadge status={status} />
-      </header>
+    <div className="space-y-8">
+      <PageHeader
+        title="Live"
+        description="Real-time event stream and active transcript from Guardian."
+        action={<StatusBadge status={status} />}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <Card>
+        <Card className="rounded-2xl shadow-sm">
           <CardHeader>
-            <CardTitle>Event Log</CardTitle>
+            <CardTitle>Event log</CardTitle>
           </CardHeader>
           <CardContent>
             {events.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
+              <p className="py-12 text-center text-sm text-muted-foreground">
                 Waiting for events from the backend ({STATUS_LABEL[status].toLowerCase()}).
               </p>
             ) : (
@@ -92,15 +90,15 @@ export default function LivePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl shadow-sm">
           <CardHeader>
-            <CardTitle>Active Transcript</CardTitle>
+            <CardTitle>Active transcript</CardTitle>
           </CardHeader>
           <CardContent>
             {transcript ? (
               <p className="text-sm leading-relaxed">{transcript}</p>
             ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">
+              <p className="py-12 text-center text-sm text-muted-foreground">
                 No speech transcribed yet.
               </p>
             )}

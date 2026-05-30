@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import type { VitalKind, VitalPoint } from "@/lib/types";
@@ -61,7 +62,7 @@ function VitalCard({ metric }: { metric: MetricConfig }) {
   }, [metric.kind]);
 
   return (
-    <Card>
+    <Card className="rounded-2xl shadow-sm">
       <CardHeader>
         <CardTitle className="flex items-baseline justify-between">
           <span>{metric.title}</span>
@@ -119,13 +120,11 @@ function VitalCard({ metric }: { metric: MetricConfig }) {
 
 export default function VitalsPage() {
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Vitals</h1>
-        <p className="text-muted-foreground">
-          Heart rate, SpO2, blood pressure - last 24 hours
-        </p>
-      </header>
+    <div className="space-y-8">
+      <PageHeader
+        title="Vitals"
+        description="Heart rate, SpO₂, blood pressure, steps, and calories — last 24 hours."
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         {METRICS.map((metric) => (

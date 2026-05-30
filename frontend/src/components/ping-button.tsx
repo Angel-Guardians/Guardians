@@ -32,7 +32,7 @@ export function PingButton() {
       <Button
         variant="outline"
         size="sm"
-        className="w-full"
+        className="min-w-[10rem]"
         disabled={state === "pinging"}
         onClick={ping}
       >
