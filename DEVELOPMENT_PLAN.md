@@ -64,8 +64,8 @@ None from the playbook yet. The demo is: *press a key, say "What time is it?", h
 | Component | Pick |
 |---|---|
 | **Backend skeleton** | FastAPI + Uvicorn + SQLModel + Alembic |
-| **Patient profile DB** | SQLite — one table: `Patient` (name, age, conditions, meds, allergies, emergency contacts) |
-| **Incident log** | SQLite — append-only `Incident` table (start time, transcript, actions taken) |
+| **Patient profile DB** | Postgres — one table: `Patient` (name, age, conditions, meds, allergies, emergency contacts) |
+| **Incident log** | Postgres — append-only `Incident` table (start time, transcript, actions taken) |
 | **Wake word** | openWakeWord with a custom "Hey Guardian" model (or push-to-talk if training the wake word slips) |
 | **Single agent** | One LangGraph graph (no Orchestrator + Sub-Agents split yet) |
 | **Two tools** | `get_patient_profile()`, `call_911_mock(summary)` — the mock prints to console + writes to incident log |
@@ -79,7 +79,7 @@ None from the playbook yet. The demo is: *press a key, say "What time is it?", h
 
 - [ ] Saying "Hey Guardian, I fell" reliably triggers the wake word, transcribes correctly, and the agent calls the mock 911 tool with a summary that names the patient and her cardiac history.
 - [ ] The same flow works from at least 6 feet from the mic.
-- [ ] The `Incident` row is queryable from SQLite after the demo.
+- [ ] The `Incident` row is queryable from Postgres after the demo.
 - [ ] The TTS response is reassuring in tone.
 
 ### Effort
@@ -105,7 +105,7 @@ None from the playbook yet. The demo is: *press a key, say "What time is it?", h
 | **Safety Agent** | LangGraph subgraph — owns 911 escalation, geolocation, contact-tree |
 | **Companion Agent** | LangGraph subgraph — owns calm-keeping dialogue, status updates ("ambulance is 4 minutes away") |
 | **Risk Classifier** | Rule-based v0 (no ML yet) — emits Tier 1–4 based on keywords + duration |
-| **Event Log** | Append-only SQLite table — the spine of cross-agent state |
+| **Event Log** | Append-only Postgres table — the spine of cross-agent state |
 | **Conversation Memory** | In-process buffer per incident (durable in Phase 4) |
 | **Tool bus skeleton** | `tools/` package with the four buckets; populated with `voice_tts`, `emergency_caller`, `contact_tree`, `get_patient_profile`, `event_log_write`, `risk_classifier` |
 | **Per-agent voice profiles** | Two Kokoro voices: "urgent" (Safety) vs "calm" (Companion) |
@@ -302,7 +302,7 @@ None from the playbook yet. The demo is: *press a key, say "What time is it?", h
 | Concern | Module |
 |---|---|
 | **Disk encryption** | LUKS (whole device) |
-| **DB encryption** | SQLCipher (SQLite), `pgcrypto` (if migrated to Postgres) |
+| **DB encryption** | Postgres `pgcrypto` (column-level) + TLS in transit |
 | **Audit log** | Append-only event log with content-hash chain for tamper evidence |
 | **Hardware mic kill switch** | Physical switch on the ReSpeaker; status surfaced in UI |
 | **Caregiver remote access** | Tailscale mesh — encrypted, ephemeral keys, no public exposure |
@@ -434,7 +434,7 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ───┐
 | Consent model |  |  |  |  |  | x | x | x | x |
 | Pipecat + Parakeet + speaker ID |  |  |  |  |  |  | x | x | x |
 | Audio event detection |  |  |  |  |  |  | x | x | x |
-| SQLCipher + LUKS + audit chain |  |  |  |  |  |  |  | x | x |
+| pgcrypto + TLS + LUKS + audit chain |  |  |  |  |  |  |  | x | x |
 | NIM/TensorRT + Riva |  |  |  |  |  |  |  | x | x |
 | Translation (SeamlessM4T) |  |  |  |  |  |  |  |  | x |
 | Voice cloning (XTTS) |  |  |  |  |  |  |  |  | x |

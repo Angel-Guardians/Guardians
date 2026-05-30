@@ -252,9 +252,9 @@ The top-tier agent that hears every signal and decides which Sub-Agent owns it. 
 | **Routing logic** | LLM-as-router | Generalist Llama 3.1 8B picks the sub-agent. |
 | | Rule-based router | Deterministic + cheap for clear signals (e.g., audio event of category=`fall` → Safety Agent). |
 | | **Hybrid** (recommended) | Rules for unambiguous signals, LLM for narrative ones. |
-| **State store** | **LangGraph checkpointer → SQLite** | Lets you resume an in-flight incident across restarts. |
+| **State store** | **LangGraph checkpointer → Postgres** | Lets you resume an in-flight incident across restarts. |
 
-**Recommendation:** **LangGraph Supervisor** with a hybrid router (rules for clear signals, LLM for narrative), checkpointing to SQLite.
+**Recommendation:** **LangGraph Supervisor** with a hybrid router (rules for clear signals, LLM for narrative), checkpointing to Postgres.
 
 ---
 
@@ -317,7 +317,7 @@ These are the dedicated modules shown in the SVG: **personal baseline model**, *
 | **Pattern-absence detector** | Custom: maintain a per-day rhythm fingerprint (audio activity per 15-min bucket, motion events, mic energy). Flag when current day deviates beyond N MAD from the rolling baseline. | The "silent morning" scenario. |
 | **Tiered risk classifier** | Small fine-tuned classifier (Phi-3.5-mini or a sklearn gradient-boosted model on extracted features) emitting a 4-level severity. | Cheap so it can run on every event. The big LLM only gets called for ambiguous cases. |
 | **Drug-interaction check** | Local snapshot of **RxNav / DrugBank** + a deterministic rules engine. | No API call at runtime — pure lookup on the patient's med list. |
-| **Event log** | Append-only table in SQLite, with a content-hash chain for tamper-evidence. | Foundational for PHIPA audit + replay. |
+| **Event log** | Append-only table in Postgres, with a content-hash chain for tamper-evidence. | Foundational for PHIPA audit + replay. |
 | **Conversation memory** | Short-term in-process, long-term in Qdrant with episode-level summaries (LLM-generated nightly). | Companion Agent's memory recap feature relies on this. |
 
 **Recommendation:** A `reasoning/` sub-package in the Backend with one file per module above, each exposed as a tool on the bus.
@@ -388,11 +388,11 @@ Three data shapes — don't try to use one store for all.
 
 | Data | Store | Why |
 |---|---|---|
-| Patient profile, meds, contacts, conditions, regimens | **SQLite + SQLCipher** | Encrypted at rest, single file, zero ops |
+| Patient profile, meds, contacts, conditions, regimens | **Postgres + pgcrypto/TLS** | Concurrent access, robust relational guarantees, encrypt-at-rest via pgcrypto |
 | Vitals time-series | **InfluxDB 3** | Built for this access pattern |
 | Conversation embeddings + medical KB | **Qdrant** | Same instance for both indices |
-| Audio recordings + transcripts | Encrypted filesystem + SQLite manifest | Don't put raw audio in a DB |
-| Event log (append-only) | SQLite with content-hash chain | Tamper-evident audit trail |
+| Audio recordings + transcripts | Encrypted filesystem + Postgres manifest | Don't put raw audio in a DB |
+| Event log (append-only) | Postgres with content-hash chain | Tamper-evident audit trail |
 | ORM | **SQLModel** (Pydantic + SQLAlchemy) | Same Pydantic models everywhere |
 
 ---
@@ -496,9 +496,9 @@ For hackathon: minimal fall-vs-no-fall classifier feeding the **Safety Agent**.
 | Layer | Module |
 |---|---|
 | Disk encryption | LUKS (whole device) |
-| DB encryption | SQLCipher (SQLite), `pgcrypto` (Postgres) |
+| DB encryption | Postgres `pgcrypto` (column-level) + TLS in transit |
 | Secrets | `pass` + GPG, or HashiCorp Vault |
-| Audit log | Append-only SQLite event log + signed log chain |
+| Audit log | Append-only Postgres event log + signed log chain |
 | Network | Local-only by default; **Tailscale** for caregiver remote access |
 | Microphone kill switch | Hardware switch on the mic array — non-negotiable for trust |
 
@@ -526,7 +526,7 @@ Stretch: Riva, SeamlessM4T multilingual, Wi-Fi CSI fall classifier, NIM/TensorRT
 | Audio events | YAMNet + CLAP |
 | LLM runtime | vLLM → NIM/TensorRT-LLM |
 | LLM models | Llama 3.1 8B (generalist) + Meditron-7B (clinical) + Phi-3.5-mini (risk classifier) |
-| **Orchestrator** | **LangGraph Supervisor + hybrid (rule + LLM) router + SQLite checkpointing** |
+| **Orchestrator** | **LangGraph Supervisor + hybrid (rule + LLM) router + Postgres checkpointing** |
 | **Sub-Agents** | **6 LangGraph subgraphs (Safety / Health / Reminder / Companion / Behavior / Caregiver Liaison)** |
 | **Shared Tool Bus** | **Stateless Pydantic-typed Python tools in 4 buckets, gated per-agent** |
 | Reasoning modules | River (baselines) + PyOD (anomalies) + Phi-3.5-mini risk classifier + local RxNav (interactions) |
@@ -534,11 +534,11 @@ Stretch: Riva, SeamlessM4T multilingual, Wi-Fi CSI fall classifier, NIM/TensorRT
 | Voice pipeline | Pipecat (inside Backend) |
 | Translation | SeamlessM4T v2 |
 | Wearable | Polar H10 via `bleak` → InfluxDB |
-| Patient DB | SQLite + SQLCipher (via SQLModel) |
+| Patient DB | Postgres + pgcrypto/TLS (via SQLModel) |
 | Time-series | InfluxDB 3 |
 | TTS | Kokoro (hackathon) → Riva (prod); per-agent voice profiles |
-| UI | Next.js + Recharts (or Streamlit) over SSE |
+| UI | Next.js + Recharts over SSE |
 | Notification dispatcher | Tiered (whisper / nudge / alarm / call) over TTS + UI + Hue/Matter + Twilio |
 | External MCPs | Calendar, Spotify, Twilio, Toronto Open Data, Pharmacy, FHIR, Filesystem |
 | Observability | Langfuse + Prometheus + Grafana |
-| Privacy | SQLCipher + LUKS + hardware mic switch + Tailscale + signed audit log |
+| Privacy | pgcrypto + TLS + LUKS + hardware mic switch + Tailscale + signed audit log |

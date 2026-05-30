@@ -7,12 +7,12 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from backend.config import settings
 
-# `check_same_thread=False` for SQLite is fine because we use sessions
-# scoped per request. In production switch to SQLCipher (Phase 7).
+# Postgres (psycopg 3) engine. `pool_pre_ping` recycles stale connections that
+# a container restart or idle timeout may have dropped.
 engine = create_engine(
     settings.database_url,
     echo=False,
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
+    pool_pre_ping=True,
 )
 
 

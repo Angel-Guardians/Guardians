@@ -1,10 +1,44 @@
 // Shared types mirroring the FastAPI backend (backend/api/*).
 
+export interface EmergencyContact {
+  id?: number;
+  name: string;
+  relationship: string;
+  phone: string;
+  priority: number;
+}
+
+export interface ProfileMedication {
+  id?: number;
+  name: string;
+  dose: string;
+  schedule_cron: string;
+  with_food: boolean;
+  notes?: string | null;
+}
+
+export interface PatientProfile {
+  id: number;
+  name: string;
+  age: number;
+  conditions: string[];
+  allergies: string[];
+  primary_language: string;
+  notes?: string | null;
+  emergency_contacts: EmergencyContact[];
+  medications: ProfileMedication[];
+}
+
+export type PatientProfileUpdate = Omit<PatientProfile, "id">;
+
 export interface Patient {
   id: number;
   name: string;
-  // Backend model is still a stub; extend as backend/db/models grows.
-  [key: string]: unknown;
+  age?: number;
+  conditions?: string[];
+  allergies?: string[];
+  primary_language?: string;
+  notes?: string | null;
 }
 
 // Events streamed from GET /events/sse. The backend serializes domain events

@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     llm_model_classifier: str = "phi3.5:mini"
 
     # Storage
-    database_url: str = "sqlite:///./guardian.db"
+    database_url: str = "postgresql+psycopg://guardian:guardian@localhost:5432/guardian"
     influxdb_url: str = "http://localhost:8086"
     influxdb_token: str = ""
     influxdb_org: str = "guardian"

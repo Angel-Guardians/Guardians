@@ -4,6 +4,11 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 
 const SECTIONS = [
   {
+    href: "/profile",
+    title: "Profile",
+    description: "Patient info, emergency contacts, and medications.",
+  },
+  {
     href: "/live",
     title: "Live",
     description: "See what Guardian is hearing and doing right now.",
