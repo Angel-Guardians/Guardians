@@ -1,73 +1,82 @@
-"""Phase 0 runner — voice-in, voice-out, single-agent.
+"""Phase 0 runner — text-file-in, text-out, single-agent, OpenAI-backed.
 
 Run from the project root:
     python scripts/phase0.py
+    python scripts/phase0.py path/to/input.txt   # process a single file
 
 Prerequisites:
     pip install -e ".[dev]"
-    ollama pull llama3.1:8b-instruct-q4_K_M
+    Set OPENAI_API_KEY in .env or the environment.
 
 Controls:
-    Enter       — start recording
-    Enter again — stop recording and send to Guardian
-    Ctrl-C      — quit
+    Enter path to a .txt file  — send its contents to Guardian
+    Type your message directly  — interactive mode
+    Ctrl-C                      — quit
 """
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
-from langchain_core.messages import HumanMessage
 from loguru import logger
 
-from backend.agents.guardian import build_guardian_graph
-from backend.always_on.capture import AudioPipeline
-from backend.tools.action.tts import speak
+from backend.agents.guardian import GuardianAgent
 
-# Simple stderr-only logging for the Phase 0 script (no logs/ dir required).
 logger.remove()
 logger.add(sys.stderr, level="INFO", format="{time:HH:mm:ss} | {level} | {message}")
 
 
+def read_text_file(path: str) -> str:
+    p = Path(path.strip())
+    if not p.exists():
+        raise FileNotFoundError(f"File not found: {p}")
+    if p.suffix.lower() != ".txt":
+        raise ValueError(f"Expected a .txt file, got: {p.suffix}")
+    return p.read_text(encoding="utf-8")
+
+
 def main() -> None:
-    logger.info("Initialising Guardian Phase 0…")
-
-    pipeline = AudioPipeline()
-    graph = build_guardian_graph()
-    history: list = []  # conversation history — grows with each turn
-
-    speak("Guardian is online. Press Enter to speak, then press Enter again when you are done.")
+    logger.info("Initialising Guardian Phase 0 (text mode, OpenAI)…")
+    agent = GuardianAgent()
 
     print()
-    print("Guardian Phase 0 — push to talk")
-    print("  Enter  : start / stop recording")
-    print("  Ctrl-C : quit")
+    print("Guardian Phase 0 — text file mode")
+    print("  Type a file path (.txt) to load and send its contents")
+    print("  Or type your message directly (no file extension)")
+    print("  Ctrl-C to quit")
     print()
+
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
+        try:
+            text = read_text_file(file_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Error: {exc}")
+            sys.exit(1)
+
+        print(f"[ Loaded: {file_path} ]")
+        print(f"  Input    : {text[:120]}{'…' if len(text) > 120 else ''}\n")
+        print(f"  Guardian : {agent.chat(text)}\n")
+        return
 
     try:
         while True:
-            input("[ Press Enter to START talking ]")
-            print("  (recording…)")
-            pipeline.start_recording()
-
-            input("[ Press Enter to STOP talking  ]")
-            print("  (transcribing…)")
-            text = pipeline.stop_and_transcribe().strip()
-
-            if not text:
-                print("  (nothing heard — try again)\n")
+            user_input = input("You (file path or text): ").strip()
+            if not user_input:
                 continue
 
-            print(f"\n  You      : {text}")
-            history.append(HumanMessage(content=text))
+            if user_input.endswith(".txt") or Path(user_input).exists():
+                try:
+                    text = read_text_file(user_input)
+                    print(f"  [ Loaded {len(text)} chars from {user_input} ]")
+                except (FileNotFoundError, ValueError) as exc:
+                    print(f"  Error: {exc}")
+                    continue
+            else:
+                text = user_input
 
-            print("  Guardian : ", end="", flush=True)
-            result = graph.invoke({"messages": history})
-            reply: str = result["messages"][-1].content
-            history = result["messages"]  # keep full history for multi-turn context
-            print(reply)
-            print()
-
-            speak(reply)
+            print(f"  Input    : {text[:120]}{'…' if len(text) > 120 else ''}\n")
+            print(f"  Guardian : {agent.chat(text)}\n")
 
     except KeyboardInterrupt:
         print("\nGuardian shutting down. Goodbye.")

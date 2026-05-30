@@ -1,15 +1,17 @@
 """Phase 0 — single Guardian agent.
 
-A flat LangGraph graph with one node: the LLM. No sub-agents, no
-Orchestrator, no tools. This is the walking skeleton.
-
+Direct OpenAI SDK calls, no graph framework.
 Phase 2 splits this into Orchestrator + SafetyAgent + CompanionAgent.
 """
 from __future__ import annotations
 
-from langchain_core.messages import SystemMessage
-from langgraph.graph import END, START, MessagesState, StateGraph
-from backend.agents.llm import get_generalist_llm
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+from langsmith import traceable
+from langsmith.wrappers import wrap_openai
+
+load_dotenv()
 
 SYSTEM_PROMPT = """\
 You are Guardian, a calm and caring AI companion living in the patient's home.
@@ -30,17 +32,20 @@ Medications: metoprolol 50 mg (morning), aspirin 81 mg (morning).
 """
 
 
-def build_guardian_graph():
-    """Build and compile the Phase 0 single-agent graph."""
-    llm = get_generalist_llm()
+class GuardianAgent:
+    def __init__(self) -> None:
+        self._client = wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
+        self._model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        self._history: list[dict[str, str]] = []
 
-    def call_llm(state: MessagesState) -> dict:
-        messages = [SystemMessage(content=SYSTEM_PROMPT), *state["messages"]]
-        response = llm.invoke(messages)
-        return {"messages": [response]}
-
-    graph: StateGraph = StateGraph(MessagesState)
-    graph.add_node("llm", call_llm)
-    graph.add_edge(START, "llm")
-    graph.add_edge("llm", END)
-    return graph.compile()
+    @traceable(name="guardian-chat")
+    def chat(self, user_message: str) -> str:
+        self._history.append({"role": "user", "content": user_message})
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}, *self._history]
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=messages,
+        )
+        reply: str = response.choices[0].message.content
+        self._history.append({"role": "assistant", "content": reply})
+        return reply

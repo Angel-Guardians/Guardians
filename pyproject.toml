@@ -7,63 +7,24 @@ readme = "README.md"
 license = { file = "LICENSE" }
 
 dependencies = [
-    # Backend
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
-    "sse-starlette>=2.1",
-    "pydantic>=2.9",
-    "pydantic-settings>=2.6",
-    # Persistence
-    "sqlmodel>=0.0.22",
-    "alembic>=1.13",
-    "influxdb-client>=1.46",
-    # Agents / LLM
-    "langgraph>=0.2",
-    "langchain-ollama>=0.2",
-    # Scheduling / workers
-    "apscheduler>=3.10",
-    "arq>=0.26",
+    # LLM
+    "openai>=1.0",
+    "langsmith>=0.2",
+    # Config
+    "python-dotenv>=1.0",
     # Observability
     "loguru>=0.7",
-    # Audio (always-on tier)
-    "sounddevice>=0.5",
-    "numpy>=2.1",
-    "faster-whisper>=1.1",
-    "openwakeword>=0.6",
-    # TTS (pyttsx3 = offline Windows SAPI; swap for kokoro/Riva in Phase 7)
-    "pyttsx3>=2.90",
-    # Wearable
-    "bleak>=0.22",
-    # External integrations
-    "twilio>=9.3",
-    "fhir.resources>=7.1",
-    "httpx>=0.27",
-    # Reasoning
-    "river>=0.21",
 ]
 
 [project.optional-dependencies]
-ui = [
-    "streamlit>=1.39",
-    "plotly>=5.24",
-]
-rag = [
-    "qdrant-client>=1.12",
-    "sentence-transformers>=3.2",
-]
 dev = [
     "pytest>=8.3",
-    "pytest-asyncio>=0.24",
     "ruff>=0.7",
-    "mypy>=1.13",
     "ipython>=8.28",
 ]
 
 [project.scripts]
-guardian-backend = "backend.main:run"
-guardian-always-on = "backend.always_on.runner:run"
-guardian-workers = "backend.workers.runner:run"
-guardian-seed = "scripts.seed_patient:main"
+guardian-phase0 = "scripts.phase0:main"
 
 [build-system]
 requires = ["hatchling"]
