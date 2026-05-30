@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from backend.db.session import init_db
 
     init_db()
+    from backend.db.seed import seed_if_empty
+
+    seed_if_empty()
     app.state.event_bus = EventBus()
     # TODO: start orchestrator, scheduler, subscribe sub-agents to bus
     yield
