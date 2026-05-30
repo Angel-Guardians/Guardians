@@ -18,7 +18,11 @@ class Settings(BaseSettings):
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
 
-    # LLM
+    # LLM (LEGACY — NOT used by the live conversational path).
+    # The running app configures its model in backend/llm/config.py via LLM_* env
+    # vars (one model behind the provider-neutral seam). These per-role fields are
+    # leftovers from the original tiered design and are kept only so old configs
+    # don't error. To change the model, edit .env (LLM_MODEL); see MODELS.md.
     ollama_base_url: str = "http://localhost:11434"
     llm_model_generalist: str = "llama3.1:8b-instruct-q4_K_M"
     llm_model_clinical: str = "meditron:7b"

@@ -1,7 +1,7 @@
-"""Seed demo patients into the database.
+"""Seed the demo patient into the database.
 
-Eleanor (70), Margaret (64), Sarah (30) - the three personas the demo
-scenarios assume. Idempotent: safe to re-run.
+Seeds Eleanor (70) — the single canonical persona the scenarios and prompts
+assume. Idempotent: safe to re-run.
 
   $ guardian-seed
 """

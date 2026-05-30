@@ -1,0 +1,19 @@
+# Which prompt version each agent uses.
+#
+# This is the ONE place to switch prompts. Edit a value, restart the backend —
+# no Python changes. The value must match a key in that agent's VERSIONS dict
+# (see the matching file, e.g. safety.py). Unknown agents or versions fail loudly
+# at startup. If this file is missing, every agent falls back to "v1".
+#
+# To A/B a new prompt:
+#   1. add  V2 = with_context("...")  and  "v2": V2  to e.g. safety.py's VERSIONS
+#   2. change   safety = "v1"  ->  safety = "v2"   below
+#   3. restart the backend
+
+[active]
+safety    = "v1"
+health    = "v1"
+reminder  = "v1"
+companion = "v1"
+behavior  = "v1"
+caregiver = "v1"

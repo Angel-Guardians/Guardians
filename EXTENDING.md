@@ -11,10 +11,24 @@ Four common extension points. Each is a localized change; nothing else moves.
    `tool_names` tuple (e.g. `backend/agents/health.py`).
 That's it — the model now sees the tool and the tool loop runs it.
 
+## Edit a prompt
+Prompts live in `backend/agents/prompts/`, not inline in the agent files.
+- Change an agent's wording: edit its file (e.g. `prompts/safety.py`).
+- Change Eleanor's details (meds, contact, history): edit `PATIENT_CONTEXT` in
+  `prompts/_base.py` once — every agent picks it up. Never paste patient info into
+  individual prompts again.
+- A/B a new version: add `"v2": with_context("...")` to that agent's `VERSIONS`
+  dict, then set that agent's line in `prompts/active.toml` to `"v2"`. No agent
+  code change — `active.toml` is the one place that picks which version is live.
+
 ## Add a sub-agent
-1. Create `backend/agents/<name>.py`: subclass `ToolCallingAgent`, set
-   `name`, `system_prompt`, `tool_names`, `voice_profile`, `escalation_ceiling`.
-2. Register it in `backend/agents/guardian.py`: add to the `_agents` dict, add the
+1. Add the prompt: create `backend/agents/prompts/<name>.py` with a `VERSIONS` dict
+   (compose the shared block via `with_context(...)`), then register it in
+   `prompts/__init__.py` (`PROMPTS` + `ACTIVE`).
+2. Create `backend/agents/<name>.py`: subclass `ToolCallingAgent`, set `name`,
+   `system_prompt = get_prompt("<name>")`, `tool_names`, `voice_profile`,
+   `escalation_ceiling`.
+3. Register it in `backend/agents/guardian.py`: add to the `_agents` dict, add the
    route name to `_ROUTES`, and add a line to `_ROUTER_PROMPT` describing when to
    pick it. The LangGraph wiring in `graph.py` is automatic from the `_agents` dict.
 

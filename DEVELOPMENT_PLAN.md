@@ -1,5 +1,10 @@
 # Guardian — Development Plan
 
+> **⚠ Original roadmap, not current status.** A phased plan written before the
+> merge; phase/scenario numbering and some persona names (e.g. Margaret) predate
+> the current build, which standardizes on Eleanor. For where the code actually is
+> today read `CODEBASE_MAP.md`; for the live task board read `TEAM_TASKS.md`.
+
 A phased build plan from the simplest possible walking skeleton to a production-grade, multi-agent system. Each phase ships something **demoable on its own**; each subsequent phase strictly adds capability rather than rewriting the prior one.
 
 The hackathon window is **Phases 0 → 3**. Everything from Phase 4 onward is post-hackathon roadmap.

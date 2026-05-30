@@ -1,5 +1,8 @@
 # Guardian — Home Emergency AI Companion (merged main)
 
+> **New to the repo? Read [`ONBOARDING.md`](ONBOARDING.md) first** — a 30-min shared
+> reading path plus a per-person guide to the files that matter for your track.
+
 A multi-agent home-care companion. A hybrid router sends each message to one of
 **six specialist agents** (safety, health, reminder, behavior, caregiver liaison,
 companion); agents call tools (911 dispatch, caregiver SMS, schedule, vitals,
@@ -42,9 +45,10 @@ The routing decision, every tool call, and the spoken reply also stream onto
 
 ## Switch to the DGX Spark
 
-See **SETUP_DGX_SPARK.md**. Short version: SSH-tunnel Ollama from the Spark, then
-in `.env` set `LLM_BASE_URL=http://localhost:11434/v1`, `LLM_MODEL=nemotron`,
-`LLM_API_KEY=not-needed`. No code change.
+See **SETUP_DGX_SPARK.md** for the tunnel, and **MODELS.md** for which Nemotron
+model to pick and the effort involved. Short version: SSH-tunnel Ollama from the
+Spark, then in `.env` set `LLM_BASE_URL=http://localhost:11434/v1`,
+`LLM_MODEL=nemotron-3-nano:4b`, `LLM_API_KEY=not-needed`. No code change.
 
 ## Observability
 

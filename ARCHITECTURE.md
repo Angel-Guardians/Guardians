@@ -1,5 +1,11 @@
 # Guardian — Recommended Architecture
 
+> **⚠ Original design vision, not the current build.** This doc describes the full
+> ambitious system (tiered always-on sensing, per-role models, Grace-core pinning,
+> 27 scenarios). The merged `main` implements the conversational core only. For
+> what actually runs today read `CODEBASE_MAP.md` and `MODELS.md`. Read this for
+> the *why* and the roadmap — not as a description of current code.
+
 > The architecture decisions that hold up under all 27 scenarios, on real hardware, with real users, with PHI in play.
 
 This document is the result of a re-read across [`README.md`](README.md), [`TECH_STACK.md`](TECH_STACK.md), [`guardian_scenarios.md`](guardian_scenarios.md), and [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md). It is the **definitive recommendation** for how Guardian should be built — the architectural shape that survives the demands of every scenario in the playbook, the constraints of the DGX Spark, and the legal weight of PHIPA.
