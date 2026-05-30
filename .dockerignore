@@ -1,0 +1,33 @@
+# Backend build context (repo root). Keep heavy/host-only artefacts out.
+.git
+.venv
+**/__pycache__
+**/*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Frontend (built in its own image, never needed by the backend context)
+frontend/node_modules
+frontend/.next
+
+# Android wearable client — not part of any server image
+watch
+
+# Local data / secrets / db
+.env
+*.db
+data
+audio_dumps
+models
+logs
+*.log
+
+# Editors / OS
+.DS_Store
+.idea
+.vscode
+*.swp
