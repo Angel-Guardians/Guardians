@@ -134,3 +134,50 @@ class ReminderIntake(SQLModel, table=True):
     scheduled_for: datetime
     confirmed_at: datetime | None = None
     method: str | None = None  # "tap", "voice", "auto"
+
+
+# ---------------------------------------------------------------------------
+# Lab / health records - a results document ("doc") + its parsed rows
+# ---------------------------------------------------------------------------
+
+
+class LabReport(SQLModel, table=True):
+    """A single lab-results document (e.g. a LifeLabs PDF) and its metadata.
+
+    The original file lives on disk (``document_path`` under
+    ``settings.lab_documents_dir``); the parsed analytes are ``LabObservation``
+    rows linked back here. ``document_sha256`` makes ingestion idempotent.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    patient_id: int = Field(foreign_key="patient.id")
+    source: str  # "lifelabs_upload" | "lifelabs_mycarecompass" | "manual"
+    external_id: str | None = Field(default=None, index=True)  # portal/report id
+    lab_name: str | None = None  # "LifeLabs"
+    ordering_provider: str | None = None
+    collected_at: datetime | None = None
+    reported_at: datetime | None = None
+    document_path: str | None = None  # relative to settings.lab_documents_dir
+    document_filename: str | None = None
+    document_sha256: str | None = Field(default=None, index=True)
+    content_type: str | None = None
+    raw_text: str | None = None  # full extracted text (search / LLM fallback)
+    status: str = "parsed"  # "parsed" | "needs_review" | "raw_only"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LabObservation(SQLModel, table=True):
+    """One analyte/result line within a ``LabReport`` (a 'related row')."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    report_id: int = Field(foreign_key="labreport.id")
+    patient_id: int = Field(foreign_key="patient.id")
+    test_name: str  # "Hemoglobin", "Glucose, Fasting"
+    value_text: str | None = None  # value as printed ("118", "Negative")
+    value_num: float | None = None  # parsed numeric value when possible
+    unit: str | None = None  # "g/L", "mmol/L"
+    reference_range: str | None = None  # "120 - 160"
+    flag: str | None = None  # "H" | "L" | "A" | "C" | None (normal)
+    category: str | None = None  # section, e.g. "Hematology"
+    observed_at: datetime | None = None
+    loinc_code: str | None = None  # optional standard code (future)

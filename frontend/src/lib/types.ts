@@ -51,7 +51,7 @@ export interface GuardianEvent {
   payload?: Record<string, unknown>;
 }
 
-export type VitalKind = "hr" | "spo2" | "bp";
+export type VitalKind = "hr" | "spo2" | "bp" | "steps" | "calories";
 
 export interface VitalPoint {
   ts: string; // ISO timestamp

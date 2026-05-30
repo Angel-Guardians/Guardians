@@ -6,13 +6,13 @@ Slow-time workers run in a third process (`guardian-workers`).
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import events_sse, patient
+from backend.api import events_sse, lab_records, patient, vitals
 from backend.config import settings
 from backend.events.bus import EventBus
 from backend.logging import configure_logging
@@ -60,6 +60,8 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(patient.router, prefix="/patient", tags=["patient"])
+    app.include_router(vitals.router, prefix="/vitals", tags=["vitals"])
+    app.include_router(lab_records.router, prefix="/lab-records", tags=["lab-records"])
     app.include_router(events_sse.router, prefix="/events", tags=["events"])
 
     @app.get("/health")

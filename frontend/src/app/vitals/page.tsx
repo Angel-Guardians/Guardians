@@ -26,6 +26,8 @@ const METRICS: MetricConfig[] = [
   { kind: "hr", title: "Heart Rate", unit: "bpm", color: "var(--chart-1)" },
   { kind: "spo2", title: "SpO2", unit: "%", color: "var(--chart-2)" },
   { kind: "bp", title: "Blood Pressure", unit: "mmHg", color: "var(--chart-3)" },
+  { kind: "steps", title: "Steps", unit: "count", color: "var(--chart-4)" },
+  { kind: "calories", title: "Calories", unit: "kcal", color: "var(--chart-5)" },
 ];
 
 type LoadState =

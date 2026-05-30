@@ -43,6 +43,17 @@ class Settings(BaseSettings):
     # FHIR
     fhir_base_url: str = "http://hapi.fhir.org/baseR4"
 
+    # Lab records / external health-record sources
+    # Where uploaded/fetched result documents (PDFs) are stored on disk.
+    lab_documents_dir: str = "./data/lab_documents"
+    # LifeLabs MyCareCompass (Ontario portal). No public patient API exists, so
+    # PDF upload is the primary path and the crawler is an opt-in convenience.
+    lifelabs_base_url: str = "https://on.mycarecompass.lifelabs.com"
+    lifelabs_username: str = ""
+    lifelabs_password: str = ""
+    # Persisted browser session (cookies) so MFA only has to be done once.
+    lifelabs_session_dir: str = "./data/lifelabs_session"
+
     # Backend
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
