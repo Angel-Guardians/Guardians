@@ -1,5 +1,11 @@
 # Guardian — 3-Day Hackathon Plan: MVP to Production-Demo
 
+> **⚠ Original build plan, not current status.** Written before the merge; it
+> assumes a local Ollama-per-role setup (llama3.1 / meditron / phi3.5) and
+> Grace-core pinning that the merged build does not use. For the model story today
+> read `MODELS.md`; for who's doing what now read `TEAM_TASKS.md`. Useful for build
+> order and ideas, not as a description of current code.
+
 > 72 hours from `git clone` to judges seeing a production-quality demo.
 
 All workloads live on **the DGX Spark** — no separate edge hardware. Always-on services (wake word, VAD, STT, audio event classification, sensor poll, scheduler) run in **CPU-pinned background processes** on the Grace ARM cores. The Llama 3.1 8B agent + Kokoro TTS bind to the **Blackwell GPU** on demand.

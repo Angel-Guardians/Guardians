@@ -13,6 +13,7 @@
   h1 { font-size: 1.7rem; margin-bottom: 4px; }
   h2 { font-size: 1.25rem; margin-top: 34px; padding-bottom: 6px; border-bottom: 2px solid #d9534f33; }
   .meta { color: #888; font-size: .9rem; margin-bottom: 8px; }
+  .sub { color: #999; font-size: .9rem; font-style: italic; margin: 2px 0 10px; }
   .group { font-weight: 600; margin: 18px 0 6px; }
   .group code, li code { background: #8881; padding: 1px 5px; border-radius: 4px; font-size: .85em; }
   ul { list-style: none; padding-left: 4px; margin: 0; }
@@ -29,146 +30,139 @@
 </head>
 <body>
 <h1>Guardian — Team To-Do Board</h1>
-<div class="meta"><strong>Lead / PM:</strong> Mehrazin · <strong>Branch:</strong> <code>merge/reconciled-main</code> · github.com/Angel-Guardians/Guardians</div>
-<div class="meta">Tick boxes save automatically in this browser. Reshuffle assignments by strength — every track can start now.</div>
+<div class="meta"><strong>Branch:</strong> <code>merge/reconciled-main</code> → merge to <code>main</code> first · github.com/Angel-Guardians/Guardians</div>
+<div class="meta">The repo runs end-to-end now — swap your real piece in behind its contract without breaking the run. Ticks save automatically in this browser.</div>
 <div class="bar"><span id="progress">0 / 0 done</span><button onclick="resetAll()">Reset all</button></div>
 
 <div id="board"></div>
 
 <script>
 const DATA = [
-  ["Setup — everyone does this once", [
+  ["Kickoff — all together, ~20 min, do this first", null, [
     [null, [
-      "Pull <code>main</code> after the reconciled base is merged, branch off it: <code>git checkout -b feat/&lt;track&gt;-&lt;thing&gt;</code>",
-      "Copy <code>.env.example</code> → <code>.env</code>, fill in <code>LLM_API_KEY</code> (OpenAI for now)",
-      "Confirm local run: <code>pip install -e .</code> then <code>guardian-backend</code>, hit <code>GET /health</code>",
-      "Read <code>EXTENDING.md</code> before adding any tool/agent/persona/scenario",
-      "Run <code>python3 -m compileall backend</code> and <code>pytest -q</code> before every push",
+      "Walk the repo: <code>README.md</code>, <code>MERGE_NOTES.md</code>, <code>EXTENDING.md</code>",
+      "Run it: <code>pip install -e .</code>, <code>guardian-backend</code>, the Next.js frontend; hit <code>GET /health</code> and send one <code>/turn</code>",
+      "Freeze the contracts out loud — event shape (<code>backend/events/types.py</code>), <code>/turn</code> + <code>/vitals</code> payloads, the LLM <code>.env</code> seam",
+      "Arian shares the Spark <code>LLM_BASE_URL</code> the moment the model answers — unblocks everyone's real-model testing",
     ]],
   ]],
-  ["Setareh — Agent brain & memory/RAG", [
-    ["Harden the six system prompts (<code>backend/agents/*.py</code>)", [
-      "Tighten <code>safety</code> prompt — stays in-scope, urgent voice, escalates correctly",
-      "Tighten <code>health</code>, <code>reminder</code>, <code>companion</code> prompts",
-      "Tighten <code>behavior</code>, <code>caregiver_liaison</code> prompts",
-      "Add one hand-written scenario per agent under <code>tests/scenarios/</code>",
+  ["Arian — Inference, DGX Spark & agent brain", "Systems/inference lead — get a reachable local model early; it unblocks the team.", [
+    ["DGX Spark + inference seam (<code>SETUP_DGX_SPARK.md</code>, <code>backend/llm/</code>)", [
+      "Stand up the local model endpoint on the Spark; confirm a raw completion returns text",
+      "Point <code>.env</code> at Spark (<code>LLM_BASE_URL</code>, <code>LLM_MODEL</code>), confirm a full <code>/turn</code> completes — no code changes",
+      "Share the base URL with the team",
+      "Verify the provider-neutral seam: same code path on OpenAI and Spark (the 'runs anywhere' story)",
     ]],
-    ["Improve the router (<code>backend/agents/guardian.py</code>)", [
+    ["Agent brain — with Setareh (<code>backend/agents/</code>)", [
+      "Pair on hardening router + prompts so findings read well on the local model",
+      "Tune mock/fallback replies so the demo survives a brief model hiccup",
+    ]],
+    ["Retrieval / RAG (<code>backend/tools/memory.py</code>, <code>backend/memory/vector_store.py</code>)", [
+      "Add a real vector store (pgvector or FAISS) over <code>data/personas/*.md</code>, keep keyword fallback",
+      "Confirm <code>recall_history</code> returns relevant chunks and degrades gracefully with no DB",
+    ]],
+    ["Spark proof for the demo", [
+      "Capture GPU utilization (<code>nvidia-smi dmon</code>), model name, tokens/sec, and a network-off → still-works clip",
+    ]],
+  ]],
+  ["Setareh — Agent brain & orchestration", "Owns the brain. Danial pairs on the backend pieces.", [
+    ["Prompt organization — with Arian (<code>backend/agents/prompts/</code>)", [
+      "Extract the six inline <code>SYSTEM_PROMPT</code> strings into a <code>prompts/</code> folder",
+      "Pull the duplicated patient/persona block into one shared <code>PATIENT_CONTEXT</code> composed into each prompt",
+      "Add a small config map (agent → active prompt version) for easy A/B without touching agent code",
+      "Point each agent's <code>system_prompt</code> at the registry instead of an inline string",
+    ]],
+    ["System prompts (<code>backend/agents/*.py</code>)", [
+      "Tighten <code>safety</code> — in-scope, urgent voice, escalates correctly",
+      "Tighten <code>health</code>, <code>reminder</code>, <code>companion</code>",
+      "Tighten <code>behavior</code>, <code>caregiver_liaison</code>",
+    ]],
+    ["Router (<code>backend/agents/guardian.py</code>)", [
       "Keep the deterministic <code>_SAFETY_KEYWORDS</code> fast-path intact",
       "Reduce misroutes on ambiguous messages",
       "Grow <code>tests/unit/test_router.py</code> to ≥10 cases, all green",
     ]],
-    ["Real RAG over persona history", [
-      "Add <code>backend/memory/vector_store.py</code> (pgvector path)",
-      "Make <code>memory.py</code> use pgvector when <code>MEMORY_BACKEND=pgvector</code>, keyword fallback otherwise",
-      "Verify <code>recall_history</code> returns relevant chunks from <code>data/personas/eleanor.md</code>",
-      "Confirm graceful degrade with no DB present",
-    ]],
-    ["Wire tool stubs to the DB (<code>backend/tools/*.py</code>, <code>backend/db/</code>)", [
+    ["Tools → real data (<code>backend/tools/*.py</code>, <code>backend/db/</code>)", [
       "<code>get_schedule</code> / <code>mark_med_taken</code> read+write real rows",
       "<code>log_vital</code> / <code>get_medications</code> hit the DB",
-      "One reminder turn round-trips through a real schedule row",
+      "Consent/escalation branch demos cleanly both ways (notify family vs. call 911)",
     ]],
   ]],
-  ["Arian — Frontend (Next.js)", [
+  ["Danial — Frontend UI + backend glue", "Across UI and backend; helping Setareh.", [
     ["Live page (<code>app/live/page.tsx</code>, <code>hooks/useEventStream.ts</code>)", [
-      "Render SSE timeline: transcript → routing → tool calls → reply",
-      "Color-code each step by agent",
+      "Render SSE timeline: transcript → routing → tool calls → reply, color-coded by agent",
       "Auto-scroll / handle reconnect on the EventSource",
     ]],
     ["Vitals chart (<code>app/vitals/page.tsx</code>)", [
-      "Wire <code>getVitals</code> into a chart (heart rate first)",
-      "Live-update as new points arrive",
+      "Wire <code>getVitals</code> into a live-updating chart (heart rate first)",
     ]],
     ["Reminders + med confirm (<code>app/reminders/page.tsx</code>)", [
-      "List meds (mock data until backend endpoints land — coordinate w/ Setareh)",
-      "Tap-to-confirm intake via <code>confirmIntake</code>",
-      "Swap mock → real once <code>listMedications</code> ships",
+      "List meds + tap-to-confirm intake",
+      "Backend (with Setareh): land <code>GET /medications</code> and <code>POST /events</code> (both TODO in <code>api.ts</code>)",
     ]],
     ["Profile editor (<code>components/profile/profile-editor.tsx</code>)", [
-      "Save through <code>updatePatientProfile</code>",
-      "Edits persist across reload",
+      "Save through <code>updatePatientProfile</code>, edits persist across reload",
+    ]],
+    ["Vitals pipeline / dev data (<code>scripts/inject_vital.py</code> — stubbed)", [
+      "Implement the simulator so the chart has realistic HR without hardware",
     ]],
   ]],
-  ["Danial — Watch, vitals pipeline & always-on sensing", [
-    ["Vitals simulator first (<code>scripts/inject_vital.py</code> — stubbed)", [
-      "Implement it to stream synthetic HR into the DB",
-      "Confirm points show via <code>GET /vitals</code> (unblocks Arian's chart)",
-    ]],
-    ["Wear OS app → backend (<code>watch/app/</code>)", [
-      "Post HR every 60s to <code>POST /vitals/ingest</code>",
-      "Match contract <code>{patient_id, device, readings:[{kind,value,ts}]}</code>",
-      "Confirm rows land and render in the UI",
-    ]],
-    ["Always-on capture seam (<code>backend/always_on/</code> — stubbed)", [
-      "Make the path importable and run as a clean no-op (STT/wakeword stay frozen)",
-      "Leave clear <code>TODO</code> markers where Whisper/wakeword plug in",
-    ]],
-    ["Stretch", [
-      "Real Polar H10 chest-strap HR via <code>POLAR_H10_MAC</code>",
-    ]],
-  ]],
-  ["Sahar — Infra, DGX Spark, observability, scenarios & tests", [
-    ["DGX Spark deployment (<code>SETUP_DGX_SPARK.md</code>)", [
-      "Stand up the local model endpoint",
-      "Point <code>.env</code> at Spark, confirm a turn completes (no code changes)",
-      "Document any gaps back into <code>SETUP_DGX_SPARK.md</code>",
-    ]],
-    ["LangSmith observability", [
-      "Set <code>LANGSMITH_TRACING=true</code> + key",
-      "Confirm one span per node, tool calls nested",
-      "Capture a screenshot for the demo",
+  ["Sahar — Scope, data, scenarios & demo", "Driving scope, data, and demo prep.", [
+    ["Data (<code>data/</code>)", [
+      "Verify the Toronto cool-spaces dataset (CKAN <code>open.toronto.ca</code>); if not clean fast, the repo's <code>cool_spaces.json</code> is the honest fallback — don't over-search",
+      "Confirm the nearest cool space is believable for the persona's area",
+      "Keep the source-citation string honest (\"Toronto Heat Relief Network\")",
+      "Sanity-check <code>data/personas/eleanor.md</code> reads well as RAG context",
     ]],
     ["Scenarios & demo script (<code>scenarios/</code>, <code>tests/scenarios/</code>)", [
-      "Implement <code>scripts/demo_reset.py</code> (stubbed) to reset DB to clean demo state",
+      "Implement <code>scripts/demo_reset.py</code> (stubbed) to reset the DB to clean demo state",
       "Script the fall scenario",
       "Script the heat-risk scenario",
       "Script the med-reminder scenario",
     ]],
-    ["pgvector + docker-compose (<code>docker-compose.yml</code>)", [
-      "Bring up <code>pgvector/pgvector:pg17</code>",
-      "Point <code>DATABASE_URL</code> at it, confirm seed/migrations",
-      "Hand off to Setareh for RAG",
-    ]],
-    ["Tests", [
-      "Smoke + router + scenario-01 green",
-      "<code>pytest -q</code> passes locally / CI, covers each agent route",
+    ["Demo capture", [
+      "Record the hero clip once green, plus a fallback clip for a live glitch",
+      "Confirm <code>pytest -q</code> is green (smoke, router, scenario-01)",
     ]],
   ]],
-  ["Mehrazin (you) — Lead / PM", [
+  ["Mehrazin — Coordinator & integration", null, [
     [null, [
-      "Merge <code>merge/reconciled-main</code> → <code>main</code> via PR (point reviewers at <code>MERGE_NOTES.md</code>)",
-      "Own handoffs: reminders/meds (Setareh↔Arian), vitals contract (Danial↔Arian), pgvector (Setareh↔Sahar)",
-      "Protect demo time — Live page + traces are the showpiece",
-      "Daily 10-min standup against this board",
+      "Merge <code>merge/reconciled-main</code> → <code>main</code> via PR (reviewers read <code>MERGE_NOTES.md</code>)",
+      "Run the kickoff; lock the hero script; freeze the contracts",
+      "Checkpoint 1 (midday): does it run end-to-end for everyone? Integrate branches.",
+      "Checkpoint 2 (evening): real Spark model + real data? Integrate, then freeze features.",
+      "Own the handoffs: Spark URL (Arian→all), meds/events (Setareh↔Danial), RAG store (Arian↔Setareh)",
+      "Hold scope — anything not serving the hero flow goes to the stretch list",
+      "Help Sahar with demo + video prep — storyboard the hero flow, narrate/record the clip",
+      "Write the README submission blurb + the \"simulated sensors\" honesty section",
     ]],
   ]],
-  ["Handoffs to watch", [
+  ["Frozen by design / cut order", null, [
     [null, [
-      "Reminders/meds endpoints: <strong>Setareh → Arian</strong>",
-      "Vitals simulator data: <strong>Danial → Arian</strong>",
-      "pgvector DB: <strong>Sahar → Setareh</strong>",
-      "Frozen by design (don't unfreeze unless demo needs voice): STT (Whisper), TTS (Kokoro), wakeword",
+      "<strong>Frozen</strong> (don't unfreeze unless demo needs voice): STT (Whisper), TTS (Kokoro), wakeword, always-on capture loop, Wear OS watch app",
+      "<strong>If behind, cut in order:</strong> behavior/companion extras → real TTS (browser default) → real RAG (keyword fallback) → simplest backup scenario",
+      "<strong>Never cut:</strong> the one hero flow · honest Toronto data · the local-Spark proof · the recorded clip",
     ]],
   ]],
 ];
 
 const board = document.getElementById("board");
 let store = {};
-try { store = JSON.parse(localStorage.getItem("guardian-tasks") || "{}"); } catch (e) {}
+try { store = JSON.parse(localStorage.getItem("guardian-tasks-v2") || "{}"); } catch (e) {}
 let id = 0, total = 0;
 
 DATA.forEach((section, si) => {
   if (si > 0) board.appendChild(document.createElement("hr"));
   const h = document.createElement("h2"); h.innerHTML = section[0]; board.appendChild(h);
-  section[1].forEach(group => {
+  if (section[1]) { const s = document.createElement("div"); s.className = "sub"; s.textContent = section[1]; board.appendChild(s); }
+  section[2].forEach(group => {
     if (group[0]) { const g = document.createElement("div"); g.className = "group"; g.innerHTML = group[0]; board.appendChild(g); }
     const ul = document.createElement("ul");
     group[1].forEach(item => {
       const key = "t" + (id++); total++;
       const li = document.createElement("li");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = key; cb.checked = !!store[key];
-      cb.addEventListener("change", () => { store[key] = cb.checked; localStorage.setItem("guardian-tasks", JSON.stringify(store)); updateProgress(); });
+      cb.addEventListener("change", () => { store[key] = cb.checked; localStorage.setItem("guardian-tasks-v2", JSON.stringify(store)); updateProgress(); });
       const lb = document.createElement("label"); lb.htmlFor = key; lb.innerHTML = item;
       li.appendChild(cb); li.appendChild(lb); ul.appendChild(li);
     });
@@ -182,7 +176,7 @@ function updateProgress() {
 }
 function resetAll() {
   if (!confirm("Clear all ticks?")) return;
-  store = {}; localStorage.removeItem("guardian-tasks");
+  store = {}; localStorage.removeItem("guardian-tasks-v2");
   document.querySelectorAll("input").forEach(c => c.checked = false); updateProgress();
 }
 updateProgress();

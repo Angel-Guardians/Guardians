@@ -1,111 +1,110 @@
-# Guardian - Codebase Map
+# Guardian — Codebase Map
 
-Quick navigation for the repo. For *why* the architecture looks like this, read [`ARCHITECTURE.md`](ARCHITECTURE.md). For the build order, read [`HACKATHON_3DAY_PLAN.md`](HACKATHON_3DAY_PLAN.md).
+Where everything lives in the **merged `main`**. This describes the code that
+actually runs today. For the *why* behind the design, see `ARCHITECTURE.md` (note:
+that doc is the original vision — parts are aspirational, see its banner).
 
 ```
-guardian/
-├── backend/                    # Single Python package, one FastAPI process
-│   ├── main.py                 # Uvicorn entry; wires routers + lifespan
-│   ├── config.py               # Settings via pydantic-settings (.env)
-│   ├── logging.py              # Loguru config
+Guardians/
+├── backend/                      # One Python package, one FastAPI process
+│   ├── main.py                   # Uvicorn entry; wires routers + lifespan
+│   ├── config.py                 # App settings via pydantic-settings (.env)
+│   │                             #   ⚠ its llm_model_* / whisper_* fields are
+│   │                             #   legacy and NOT used by the live path — the
+│   │                             #   model is set in backend/llm/. See MODELS.md.
+│   ├── logging.py                # Loguru config
 │   │
-│   ├── always_on/              # CPU-pinned background services (Grace cores)
-│   │   ├── runner.py           # Entrypoint; starts mic+wake+VAD+STT loop
-│   │   └── capture.py          # The always-on audio pipeline
-│   │   # Filled later: vad.py, transcribe.py, wake.py, audio_events.py,
-│   │   # wearable.py, env_sensors.py
+│   ├── llm/                      # ★ Provider-neutral LLM seam (OpenAI now, Spark later)
+│   │   ├── config.py             # LLM_* env -> settings (the ONLY model config)
+│   │   ├── factory.py            # build_llm()
+│   │   ├── openai_compatible.py  # the ONLY file importing `openai`
+│   │   ├── base.py               # LLM interface
+│   │   └── tracing.py            # optional LangSmith spans (no-op when unset)
 │   │
-│   ├── orchestrator/           # Tier 1 - the supervisor
-│   │   ├── supervisor.py       # LangGraph Supervisor
-│   │   ├── router.py           # Hybrid rule+LLM router
-│   │   └── risk_classifier.py  # CTAS-aligned Tier 1-4 classifier
+│   ├── agents/                   # The router + six specialists
+│   │   ├── guardian.py           # ★ Hybrid router (keyword fast-path + LLM)
+│   │   ├── graph.py              # LangGraph wiring (router -> 6 specialists)
+│   │   ├── base.py               # ToolCallingAgent — the tool-calling loop
+│   │   ├── safety.py  health.py  reminder.py
+│   │   ├── companion.py  behavior.py  caregiver_liaison.py
+│   │   ├── prompts/              # ★ Prompt registry (no inline prompt strings)
+│   │   │   ├── _base.py          #   PATIENT_CONTEXT (Eleanor) — single source
+│   │   │   ├── <agent>.py        #   per-agent VERSIONS dict
+│   │   │   ├── active.toml       #   which version each agent uses (edit here)
+│   │   │   └── __init__.py       #   get_prompt(name)
+│   │   ├── llm.py                #   legacy shim — raises a clear error; ignore
+│   │   └── voice_profiles.py     #   legacy; voice metadata now lives on agents
 │   │
-│   ├── agents/                 # Tier 2 - the six sub-agents
-│   │   ├── base.py             # SubAgent abstract base
-│   │   ├── llm.py              # Ollama wrapper
-│   │   ├── voice_profiles.py   # Enum of voice profiles per sub-agent
-│   │   ├── safety.py           # Falls, panic, violence - can call 911
-│   │   ├── health.py           # Vitals, anomalies, chronic
-│   │   ├── reminder.py         # Meds, vitamins, appointments
-│   │   ├── companion.py        # Talk, calm, recall
-│   │   ├── behavior.py         # Long-horizon behavioural monitoring
-│   │   └── caregiver_liaison.py # Outbound to humans (doctors, family, court)
+│   ├── tools/                    # Tool registry + stubbed tools
+│   │   ├── registry.py           # build_default_registry()
+│   │   ├── emergency.py  health.py  reminder.py  civic.py  memory.py
+│   │   └── decorators.py         # @audit_log etc.
 │   │
-│   ├── tools/                  # Tier 3 - the shared tool bus
-│   │   ├── decorators.py       # @audit_log, @idempotent, @consent_check
-│   │   ├── registry.py         # Tool registration + lookup
-│   │   ├── sensing/            # Audio listener, wearable, env, geo, manual
-│   │   ├── memory_reasoning/   # Event log, baselines, anomalies, RAG, KB
-│   │   ├── action/             # TTS, notifications, 911, contact-tree, UI
-│   │   └── integrations/       # Fitbit, Dexcom, Calendar, Twilio, FHIR, MCP
+│   ├── api/                      # FastAPI routers
+│   │   ├── turn.py               # POST /turn  (text in -> route+reply+tool_calls)
+│   │   ├── vitals.py             # POST /vitals/ingest, GET /vitals (watch contract)
+│   │   ├── events_sse.py         # GET /events/sse  (the Live page feed)
+│   │   ├── patient.py            # profile
+│   │   └── schemas.py            # request/response models
 │   │
-│   ├── api/                    # FastAPI routers
-│   │   ├── patient.py          # Profile CRUD
-│   │   └── events_sse.py       # /events/sse for the UI
-│   │
-│   ├── services/               # Business logic shared with agents
-│   │   # patient_profile.py, incident_recorder.py, reminder_scheduler.py,
-│   │   # emergency_dispatch.py, consent_check.py
-│   │
-│   ├── db/                     # SQLModel + Alembic
-│   │   ├── session.py
-│   │   └── models.py           # Patient, Incident, EventLogEntry, ...
-│   │
-│   ├── events/                 # The event bus + Event Pydantic types
+│   ├── events/                   # In-process pub/sub bus + event types
 │   │   ├── bus.py
-│   │   └── types.py
+│   │   └── types.py              # ★ event contracts — freeze before integration
 │   │
-│   └── workers/                # Arq workers (slow-time path)
-│       └── runner.py
+│   ├── db/                       # SQLModel models, session, seed (SQLite default)
+│   │   ├── models.py  session.py  seed.py
+│   │
+│   ├── services/                 # patient_profile.py (logic shared with agents)
+│   │
+│   └── orchestrator/, always_on/, workers/
+│       └── ⚠ NOT wired — scaffolds that raise NotImplementedError. The
+│         conversational path does not depend on these. Ignore unless your
+│         task is the always-on sensor tier. (See EXTENDING.md → "Not yet wired".)
 │
-├── frontend/                   # Next.js 16 (App Router) + Tailwind + shadcn/ui
+├── frontend/                     # Next.js 16 (App Router) + Tailwind + shadcn/ui
 │   └── src/
-│       ├── app/                # Routes: / (Overview), /live, /vitals, /reminders
-│       ├── components/         # Sidebar + shadcn/ui primitives
-│       ├── hooks/              # useEventStream (SSE -> /events/sse)
-│       └── lib/                # api.ts (typed fetch client), types.ts
+│       ├── app/{live,vitals,reminders,profile}/page.tsx   # the four pages
+│       ├── hooks/useEventStream.ts        # SSE consumer ({id,kind,ts,summary,payload})
+│       └── lib/api.ts                      # typed client (marks TODO(backend) endpoints)
 │
-├── scripts/                    # One-shot CLI helpers
-│   ├── seed_patient.py         # Seed Eleanor + Margaret + Sarah profiles
-│   └── demo_reset.py           # Reset state for repeatable demos
+├── data/personas/eleanor.md      # life-history note (RAG source)
+├── data/cool_spaces.json         # curated cool-space fallback dataset
+│
+├── scripts/
+│   ├── phase0.py                 # talk to Guardian (text in/out, single process)
+│   ├── try_live.py               # 5 scripted inputs through the real model
+│   ├── seed_patient.py           # seed Eleanor
+│   ├── inject_vital.py  demo_reset.py   # demo helpers (some stubbed)
 │
 ├── tests/
-│   ├── conftest.py
-│   └── scenarios/              # One test per demo scenario (1..27)
+│   ├── test_smoke.py             # green-build gate
+│   ├── unit/test_router.py       # routing tests (extend as you tune routing)
+│   └── scenarios/                # one test per demo scenario
 │
-├── README.md                   # Project pitch
-├── ARCHITECTURE.md             # The definitive architecture doc
-├── TECH_STACK.md               # Per-layer module picks
-├── guardian_scenarios.md       # 27 scenario playbooks
-├── DEVELOPMENT_PLAN.md         # Long-term phased roadmap
-├── HACKATHON_3DAY_PLAN.md      # 72-hour build plan
-├── CODEBASE_MAP.md             # (this file)
-├── pyproject.toml
-├── Makefile
-├── .env.example
-└── .gitignore
+└── docs:  README → ONBOARDING → MERGE_NOTES → (this) → EXTENDING
+         MODELS.md (models + Nemotron), SETUP_DGX_SPARK.md, ARCHITECTURE.md*
+         (* original vision — read its banner before trusting details)
 ```
 
 ## Where to put new code
 
 | You're adding... | Goes in |
 |---|---|
-| A new sub-agent | `backend/agents/<name>.py`, register in `backend/agents/__init__.py` |
-| A new tool | The right bucket under `backend/tools/<bucket>/<tool>.py`, register via `@register_tool` |
-| A new always-on signal source | `backend/always_on/<source>.py`, emit events via the bus |
-| A new event type | `backend/events/types.py` (one Pydantic model per event) |
-| A new DB table | `backend/db/models.py`, then `alembic revision --autogenerate` |
-| A new external API integration | `backend/tools/integrations/<service>.py` |
-| A new UI page | `frontend/pages/<N>_<Name>.py` |
-| A new test scenario | `tests/scenarios/test_scenario_<NN>_<name>.py` |
-| A new background job | `backend/workers/<job>.py`, register in `backend/workers/runner.py` |
+| A new specialist agent | `backend/agents/<name>.py` + a prompt in `prompts/` (see EXTENDING.md → "Add a sub-agent") |
+| A new tool | `backend/tools/<area>.py`, register in `tools/registry.py`, bind to an agent's `tool_names` |
+| New prompt wording | the per-agent file in `backend/agents/prompts/` |
+| Switching prompt versions | `backend/agents/prompts/active.toml` |
+| Patient details (meds, contacts) | `backend/agents/prompts/_base.py` (once, everywhere) |
+| A new event type | `backend/events/types.py` |
+| A new DB table | `backend/db/models.py` |
+| A new UI page | `frontend/src/app/<name>/page.tsx` |
+| A new demo scenario | a `.txt` for `phase0.py`, a line in `try_live.py`, or `tests/scenarios/` |
 
-## The three running processes
+## How it runs
 
-In production we run **three Python processes** on the DGX:
-
-1. **`guardian-always-on`** - CPU-pinned to cores 0-5. Mic, wake-word, VAD, STT-lite, audio events, wearable, env sensors. Publishes candidate events to the bus.
-2. **`guardian-backend`** - The FastAPI + Orchestrator + Sub-Agents + Tools process. Binds the LLM to the GPU. Subscribes to the bus.
-3. **`guardian-workers`** - Arq workers for slow-time jobs (nightly baselines, weekly summaries, behavior trends).
-
-During hackathon Phase 1, these can run as a single process (the always-on and worker code lives in the same Python module). The split formalises in Phase 6.
+**Today it's one process.** `guardian-backend` (FastAPI) hosts the router, the six
+specialists, the tools, the event bus, and the DB; `phase0.py` can run the same
+graph as a single CLI process for a fast sanity check. The `orchestrator/`,
+`always_on/`, and `workers/` packages sketch a future three-process split (a
+sensor tier and slow-time workers) but are **not wired** — don't let their
+presence suggest the app needs them. It doesn't.

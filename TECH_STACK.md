@@ -1,5 +1,11 @@
 # Guardian — Tech System Stack
 
+> **⚠ Original design vision, not the current build.** Lists the full intended
+> stack (per-role models like Meditron/Phi-3.5, InfluxDB, Qdrant, always-on
+> sensing). The merged `main` runs a single model behind the `backend/llm/` seam
+> and SQLite. For what's actually wired today read `CODEBASE_MAP.md` and
+> `MODELS.md`. Use this as the menu of options, not a description of current code.
+
 Hardware target: **NVIDIA DGX Spark (GB10 Grace Blackwell Superchip)** — ARM64 + Blackwell GPU, fully on-device inference, no cloud APIs for any health-relevant path.
 
 This document maps every block of the architecture diagram (and a few neighboring ones it implies) to concrete modules. For each layer we list **2–3 options** with a recommended pick and a one-line reason. Recommendations balance "ship in a hackathon weekend" against "won't be embarrassing in a real PHIPA deployment."

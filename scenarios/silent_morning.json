@@ -2,14 +2,14 @@
   "scenario_id": "silent_morning",
   "title": "Silent morning — routine break (BACKUP)",
   "persona": {
-    "name": "Margaret",
-    "age": 78,
-    "conditions": ["hypertension"],
+    "name": "Eleanor",
+    "age": 70,
+    "conditions": ["cardiac history"],
     "consent_mode": "family_first",
     "address": "Downtown Toronto (near Wellesley)",
     "lat": 43.6655,
     "lon": -79.3835,
-    "caregiver": "daughter (Lisa)"
+    "caregiver": "daughter (Maria)"
   },
   "context": {"heat_warning": false},
   "timeline": [
