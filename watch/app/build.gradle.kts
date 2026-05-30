@@ -8,7 +8,9 @@ plugins {
 
 android {
     namespace = "com.guardian.watch"
-    compileSdk = 34
+    // compileSdk 36 is required by androidx.health.connect 1.1.0; targetSdk (below)
+    // stays lower so runtime behavior is unchanged.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.guardian.watch"
@@ -68,6 +70,9 @@ dependencies {
 
     // Health sensors (heart rate, steps, calories)
     implementation(libs.androidx.health.services)
+    // Health Connect (optional): supplemental reads of metrics the device's health
+    // app already recorded (SpO2, resting HR, HRV, sleep). No-ops where unavailable.
+    implementation(libs.androidx.health.connect)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.guava) // ListenableFuture.await()
 

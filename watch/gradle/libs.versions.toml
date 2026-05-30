@@ -1,7 +1,7 @@
 # Centralized dependency versions (Gradle version catalog).
 # Bump anything here in one place; the modules reference these aliases.
 [versions]
-agp = "8.6.1"
+agp = "8.9.1"
 kotlin = "2.0.21"
 ksp = "2.0.21-1.0.27"
 coreKtx = "1.13.1"
@@ -11,6 +11,10 @@ composeBom = "2024.10.01"
 wearCompose = "1.4.0"
 # Health Services client — Galaxy Watch / Wear OS health sensors (HR, steps, calories).
 healthServices = "1.1.0-alpha05"
+# Health Connect — reads metrics the device's health app already recorded (Wear OS 5+).
+# Stable line; requires compileSdk 36 + AGP 8.9.1 + Gradle 8.11 (set below / in the
+# wrapper). If reverting to the old toolchain, pin back to 1.1.0-alpha07.
+healthConnect = "1.1.0"
 coroutines = "1.9.0"
 room = "2.6.1"
 datastore = "1.1.1"
@@ -33,6 +37,7 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 androidx-wear-compose-material = { module = "androidx.wear.compose:compose-material", version.ref = "wearCompose" }
 androidx-wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wearCompose" }
 androidx-health-services = { module = "androidx.health:health-services-client", version.ref = "healthServices" }
+androidx-health-connect = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-guava = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-guava", version.ref = "coroutines" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }

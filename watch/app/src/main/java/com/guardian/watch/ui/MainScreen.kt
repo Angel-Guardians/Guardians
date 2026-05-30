@@ -64,6 +64,36 @@ fun MainScreen(
                 }
             }
 
+            if (state.spo2 != null || state.restingHr != null ||
+                state.hrv != null || state.sleepMinutes != null
+            ) {
+                item {
+                    Text(
+                        "Health app",
+                        style = MaterialTheme.typography.caption1,
+                        color = MaterialTheme.colors.onSurfaceVariant,
+                    )
+                }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        Metric(state.spo2?.let { "${it.roundToInt()}%" } ?: "--", "SpO2")
+                        Metric(state.restingHr?.let { it.roundToInt().toString() } ?: "--", "rest bpm")
+                    }
+                }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        Metric(state.hrv?.let { it.roundToInt().toString() } ?: "--", "HRV ms")
+                        Metric(state.sleepMinutes?.let { formatSleep(it) } ?: "--", "sleep")
+                    }
+                }
+            }
+
             item {
                 ToggleChip(
                     checked = state.monitoring,
@@ -115,6 +145,8 @@ private fun Metric(value: String, label: String) {
         )
     }
 }
+
+private fun formatSleep(minutes: Double): String = "%.1fh".format(minutes / 60.0)
 
 private fun syncSubtitle(state: MonitorUiState): String {
     val pending = if (state.unsent > 0) "${state.unsent} pending" else "Up to date"

@@ -4,6 +4,7 @@ import android.content.Context
 import com.guardian.watch.data.local.GuardianDatabase
 import com.guardian.watch.data.repository.VitalsRepository
 import com.guardian.watch.data.settings.SettingsStore
+import com.guardian.watch.health.HealthConnectManager
 import com.guardian.watch.health.HealthServicesManager
 
 /**
@@ -18,4 +19,5 @@ class GuardianGraph(context: Context) {
     val settings: SettingsStore = SettingsStore(appContext)
     val repository: VitalsRepository = VitalsRepository(database.vitalReadingDao(), settings)
     val healthServicesManager: HealthServicesManager = HealthServicesManager(appContext)
+    val healthConnectManager: HealthConnectManager = HealthConnectManager(appContext)
 }

@@ -13,12 +13,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.guardian.watch.ui.MainScreen
 import com.guardian.watch.ui.MonitorViewModel
 import com.guardian.watch.ui.SettingsScreen
 import com.guardian.watch.ui.theme.GuardianWatchTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,11 +40,27 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
     val state by vm.uiState.collectAsState()
     var screen by remember { mutableStateOf(Screen.Monitor) }
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Health Connect is optional (Wear OS 5+). Its reads use a separate permission
+    // flow; request them once the standard sensor permissions are dealt with.
+    val healthConnect = remember { context.graph.healthConnectManager }
+    val healthConnectLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract(),
+    ) { /* grants are re-checked at read time in SyncWorker */ }
+
     // Ask for the sensor + notification permissions on first launch.
     val permissions = remember { requiredPermissions() }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { /* UI reflects whatever the user grants */ }
+    ) {
+        if (healthConnect.isAvailable()) scope.launch {
+            if (!healthConnect.hasAllPermissions()) {
+                healthConnectLauncher.launch(healthConnect.permissions)
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         if (permissions.isNotEmpty()) launcher.launch(permissions)
     }

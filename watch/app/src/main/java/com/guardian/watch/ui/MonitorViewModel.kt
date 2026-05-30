@@ -16,6 +16,10 @@ data class MonitorUiState(
     val heartRate: Double? = null,
     val steps: Double? = null,
     val calories: Double? = null,
+    val spo2: Double? = null,
+    val restingHr: Double? = null,
+    val hrv: Double? = null,
+    val sleepMinutes: Double? = null,
     val unsent: Int = 0,
     val lastSyncAt: Long = 0L,
     val lastSyncStatus: String = "",
@@ -38,6 +42,16 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
         Vitals(hr?.value, steps?.value, calories?.value, unsent)
     }
 
+    // Supplemental metrics pulled from Health Connect (null until/unless present).
+    private val healthConnect = combine(
+        repo.latest("spo2"),
+        repo.latest("resting_hr"),
+        repo.latest("hrv"),
+        repo.latest("sleep_minutes"),
+    ) { spo2, restingHr, hrv, sleep ->
+        HcVitals(spo2?.value, restingHr?.value, hrv?.value, sleep?.value)
+    }
+
     private val config = combine(
         settings.monitoringActive,
         settings.baseUrl,
@@ -50,12 +64,16 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     ) { at, status -> Sync(at, status) }
 
     val uiState: StateFlow<MonitorUiState> =
-        combine(vitals, config, sync) { v, c, s ->
+        combine(vitals, healthConnect, config, sync) { v, h, c, s ->
             MonitorUiState(
                 monitoring = c.monitoring,
                 heartRate = v.hr,
                 steps = v.steps,
                 calories = v.calories,
+                spo2 = h.spo2,
+                restingHr = h.restingHr,
+                hrv = h.hrv,
+                sleepMinutes = h.sleepMinutes,
                 unsent = v.unsent,
                 lastSyncAt = s.at,
                 lastSyncStatus = s.status,
@@ -80,6 +98,7 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private data class Vitals(val hr: Double?, val steps: Double?, val calories: Double?, val unsent: Int)
+    private data class HcVitals(val spo2: Double?, val restingHr: Double?, val hrv: Double?, val sleepMinutes: Double?)
     private data class Config(val monitoring: Boolean, val baseUrl: String, val patientId: Int)
     private data class Sync(val at: Long, val status: String)
 }
