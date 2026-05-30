@@ -1,30 +1,57 @@
-"""Smoke test: the whole pipeline runs end-to-end in mock mode without crashing.
-Run with:  python -m pytest -q   (or just `python tests/test_smoke.py`)
-This is the gate every teammate runs before merging.
+"""Smoke test: the whole turn pipeline runs end-to-end, offline, without crashing.
+
+This is the green-build gate every teammate runs before pushing:
+
+    pytest -q                 # or just:  python tests/test_smoke.py
+
+It drives a real `GuardianAgent` turn with a scripted `FakeLLM` — no network, no
+API key, no database, no DGX Spark. It exercises the path that actually ships:
+hybrid router -> specialist node -> tool-calling loop -> tool execution.
 """
-import os, sys
-os.environ["GUARDIAN_USE_MOCK_LLM"] = "1"          # force mock; no Spark needed
+from __future__ import annotations
+
+import os
+import sys
+
+# Allow `python tests/test_smoke.py` (not just pytest) by putting the repo on path.
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from backend.orchestrator import Context, handle_event
-from backend import simulator
+from backend.agents.guardian import GuardianAgent
+from backend.llm.base import LLMResponse, ToolCall
+from backend.tools import build_default_registry
+from tests.fakes import FakeLLM
 
 
-def test_hero_scenario_runs():
-    scn = simulator.load_scenario("heat_warning_margaret")
-    assert scn is not None, "hero scenario must exist"
-    ctx = Context({**scn["persona"], "context": scn["context"]})
-    last = None
-    for entry in scn["timeline"]:
-        ev = simulator.make_event(entry)
-        last = handle_event(ctx, ev)
-    assert last.orchestrator_decision.risk_level in ("HIGH", "CRITICAL")
-    tools_used = [t.tool for t in last.tool_calls]
-    assert "find_nearest_open_cool_space" in tools_used
-    print("OK — hero scenario ended at risk:", last.orchestrator_decision.risk_level)
-    print("    tools:", tools_used)
+def test_safety_turn_runs_end_to_end() -> None:
+    """A clear emergency must route to safety (deterministic keyword fast-path),
+    run the tool loop, fire call_911, and return a spoken reply — all offline."""
+    # Script the safety specialist: first ask to call 911, then speak a reply.
+    llm = FakeLLM(
+        [
+            LLMResponse(
+                text=None,
+                tool_calls=[
+                    ToolCall(id="t1", name="call_911",
+                             arguments={"reason": "fall with chest tightness"})
+                ],
+            ),
+            LLMResponse(text="Stay calm, Eleanor — help is on the way."),
+        ]
+    )
+    guardian = GuardianAgent(llm=llm, registry=build_default_registry())
+
+    result = guardian.turn("I fell and my chest feels tight")
+
+    assert result["route"] == "safety", result
+    assert result["reply"].strip(), "specialist must return a spoken reply"
+    tools_fired = [c["tool"] for c in result["tool_calls"]]
+    assert "call_911" in tools_fired, tools_fired
+
+    # The keyword fast-path must NOT have consulted the model for routing — the
+    # only model calls should be the specialist's two scripted turns.
+    assert len(llm.calls) == 2, llm.calls
 
 
 if __name__ == "__main__":
-    test_hero_scenario_runs()
+    test_safety_turn_runs_end_to_end()
     print("smoke test passed")

@@ -63,8 +63,8 @@ First win: a reachable Spark endpoint + shared `LLM_BASE_URL`. It unblocks every
 
 Read after the shared path:
 - **`backend/agents/prompts/`** — prompts now live here (not inline). Edit wording in
-  the per-agent file; edit Eleanor's shared details in `_base.py`; A/B versions via
-  `ACTIVE` in `__init__.py`. See `EXTENDING.md` → "Edit a prompt".
+  the per-agent file; edit Eleanor's shared details in `_base.py`; select A/B
+  versions in `active.toml`. See `EXTENDING.md` → "Edit a prompt".
 - **`backend/agents/guardian.py`** — the router (`_SAFETY_KEYWORDS` fast-path +
   `_ROUTER_PROMPT`) and the per-turn flow.
 - **`backend/agents/graph.py`** — the LangGraph wiring (router → 6 specialists).
@@ -97,5 +97,5 @@ Read after the shared path:
 
 ## Mehrazin — coordinator
 
-- **`MERGE_NOTES.md`** for the PR description; **`CONTRACTS`/`backend/events/types.py`**
+- **`MERGE_NOTES.md`** for the PR description; **`backend/events/types.py`**
   for the contracts to freeze; **`TEAM_TASKS.md`** for the board and checkpoints.

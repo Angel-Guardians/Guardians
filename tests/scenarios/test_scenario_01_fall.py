@@ -13,6 +13,6 @@ import pytest
 
 
 @pytest.mark.skip(reason="Day 1 PM target")
-async def test_scenario_01_fall_e2e(eleanor, event_bus) -> None:
+def test_scenario_01_fall_e2e(eleanor, event_bus) -> None:
     # TODO: implement after Day 1 PM
     raise NotImplementedError
