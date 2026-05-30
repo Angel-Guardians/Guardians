@@ -73,3 +73,13 @@ export interface Medication {
   scheduledFor: string; // ISO timestamp
   taken: boolean;
 }
+
+export interface AdminTable {
+  name: string;
+  count: number;
+  rows: Record<string, unknown>[];
+}
+
+export interface AdminTablesResponse {
+  tables: AdminTable[];
+}

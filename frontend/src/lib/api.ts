@@ -4,6 +4,7 @@
 // GET /health, GET /events/sse. Vitals/medication schedule endpoints still TODO.
 
 import type {
+  AdminTablesResponse,
   Medication,
   Patient,
   PatientProfile,
@@ -52,6 +53,9 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => getJson<{ status: string }>("/health"),
   ping: () => getJson<{ message: string }>("/ping"),
+
+  getAdminTables: (limit = 50) =>
+    getJson<AdminTablesResponse>(`/admin/tables?limit=${limit}`),
 
   listPatients: () => getJson<Patient[]>("/patient/"),
   getPatient: (id: number) => getJson<Patient>(`/patient/${id}`),
