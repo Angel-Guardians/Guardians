@@ -1,18 +1,20 @@
 """FastAPI entrypoint.
 
-Hosts the on-demand tier: Orchestrator + Sub-Agents + Tool Bus + API.
-Always-on services run in a separate process (`guardian-always-on`).
-Slow-time workers run in a third process (`guardian-workers`).
+Hosts the on-demand tier: the LangGraph GuardianAgent (six specialists behind a
+hybrid router), the Tool Bus, the Event Bus, and the HTTP/SSE API. The agent is
+provider-neutral — it talks only to backend.llm, so the exact same process runs
+against OpenAI cloud today and a local DGX Spark endpoint later by changing .env.
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 
-from backend.api import events_sse, patient
+from backend.api import events_sse, patient, turn, vitals
 from backend.config import settings
 from backend.events.bus import EventBus
 from backend.logging import configure_logging
@@ -20,32 +22,39 @@ from backend.logging import configure_logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Startup / shutdown hooks.
-
-    Wire here:
-      - Event bus (NATS or asyncio.Queue)
-      - Orchestrator + Sub-Agents
-      - APScheduler for reminders
-      - DB engine
-      - LLM client (Ollama)
-    """
     configure_logging()
+
     from backend.db.session import init_db
 
     init_db()
     from backend.db.seed import seed_if_empty
 
     seed_if_empty()
+
+    # Event bus: in-process pub/sub. SSE clients subscribe; /turn publishes.
     app.state.event_bus = EventBus()
-    # TODO: start orchestrator, scheduler, subscribe sub-agents to bus
+    await app.state.event_bus.start()
+
+    # Build the orchestrator once. If the LLM isn't configured yet (no key), don't
+    # crash the whole API — log it; /turn will surface the error on first use.
+    try:
+        from backend.agents.guardian import GuardianAgent
+
+        app.state.guardian = GuardianAgent()
+        logger.info("GuardianAgent ready (LLM via backend.llm).")
+    except Exception as exc:  # noqa: BLE001
+        app.state.guardian = None
+        logger.warning(f"GuardianAgent not initialised: {exc}")
+
     yield
-    # TODO: graceful shutdown
+
+    await app.state.event_bus.stop()
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Guardian",
-        version="0.1.0",
+        version="0.2.0",
         description="Home Emergency AI Companion",
         lifespan=lifespan,
     )
@@ -58,13 +67,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Routers
     app.include_router(patient.router, prefix="/patient", tags=["patient"])
     app.include_router(events_sse.router, prefix="/events", tags=["events"])
+    app.include_router(turn.router, prefix="/turn", tags=["turn"])
+    app.include_router(vitals.router, prefix="/vitals", tags=["vitals"])
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok"}
+        ready = getattr(app.state, "guardian", None) is not None
+        return {"status": "ok", "guardian": "ready" if ready else "unconfigured"}
 
     @app.get("/ping")
     async def ping() -> dict[str, str]:
@@ -77,7 +88,6 @@ app = create_app()
 
 
 def run() -> None:
-    """Entrypoint for `guardian-backend` script."""
     import uvicorn
 
     uvicorn.run(

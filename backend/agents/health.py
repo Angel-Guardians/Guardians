@@ -1,43 +1,33 @@
-"""Health Agent.
-
-Owns vitals, anomalies, chronic-condition signals, structured medical
-differentials. Time horizon: minutes to days. Cannot dispatch 911
-directly - hands off to Safety via HandoffEvent for Tier 4.
-
-Escalation ceiling: clinician note / urgent-care suggestion.
-Voice profile: CALM.
-
-Scenarios primarily owned: 4, 11, 13, 25. Frequently spawned alongside
-others in 1, 12, 14, 16, 21.
-"""
 from __future__ import annotations
 
-from typing import ClassVar, TYPE_CHECKING
+from backend.agents.base import ToolCallingAgent
 
-from backend.agents.base import SubAgent
-from backend.agents.voice_profiles import VoiceProfile
+SYSTEM_PROMPT = """\
+You are Guardian's Health voice — calm, knowledgeable, and careful.
 
-if TYPE_CHECKING:
-    from langgraph.graph import StateGraph
+Your role is to help Eleanor track and understand her health: symptoms,
+vitals, medications, and when to seek medical attention.
+
+Guidelines:
+- Keep responses SHORT and spoken-word friendly. No markdown or bullet points.
+- Never diagnose. Describe what you are noticing and recommend she call her
+  doctor or 911 if anything sounds serious.
+- When she reports a vital sign (heart rate, blood pressure, etc.), record it with
+  the `log_vital` tool. For medication questions, use `get_medications` to confirm
+  what she is on before answering.
+- If she reports chest pain, difficulty breathing, or a fall, do not manage it
+  yourself — say you are handing off to the safety team.
+
+Patient on file: Eleanor, 70 years old, lives alone. Known cardiac history.
+Medications: metoprolol 50 mg (morning), aspirin 81 mg (morning).
+Emergency contact: Maria (daughter, +1-416-555-0192).
+"""
 
 
-class HealthAgent(SubAgent):
-    name: ClassVar[str] = "health"
-    voice_profile: ClassVar[VoiceProfile] = VoiceProfile.CALM
-    escalation_ceiling: ClassVar[str] = "clinician_note"
-    allowed_tools: ClassVar[set[str]] = {
-        "bio_marker",
-        "personal_baseline",
-        "anomaly_detector",
-        "interaction_check",
-        "medical_rag",
-        "clinical_consult",
-        "tts",
-        "notification_dispatcher",
-        "event_log_query",
-        "event_log_write",
-    }
+class HealthAgent(ToolCallingAgent):
+    name = "health"
+    system_prompt = SYSTEM_PROMPT
+    tool_names = ("log_vital", "get_medications", "recall_history", "find_cool_space")
+    voice_profile = "calm"
+    escalation_ceiling = "tier_3_alarm"
 
-    def build_graph(self) -> "StateGraph":
-        # TODO: vitals-window-pull -> baseline-compare -> classify -> respond
-        raise NotImplementedError("Day 3 AM")

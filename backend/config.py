@@ -24,8 +24,9 @@ class Settings(BaseSettings):
     llm_model_clinical: str = "meditron:7b"
     llm_model_classifier: str = "phi3.5:mini"
 
-    # Storage
-    database_url: str = "postgresql+psycopg://guardian:guardian@localhost:5432/guardian"
+    # Storage — SQLite for zero-setup local dev; override DATABASE_URL with
+    # postgresql+psycopg://guardian:guardian@localhost:5432/guardian for pgvector.
+    database_url: str = "sqlite:///./guardian.db"
     influxdb_url: str = "http://localhost:8086"
     influxdb_token: str = ""
     influxdb_org: str = "guardian"

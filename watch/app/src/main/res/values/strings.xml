@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Guardian Watch</string>
+    <string name="monitoring_channel_name">Health monitoring</string>
+    <string name="monitoring_channel_desc">Keeps recording vitals while the app runs in the background.</string>
+    <string name="monitoring_notification_title">Guardian is monitoring</string>
+    <string name="monitoring_notification_text">Recording heart rate and syncing every minute.</string>
+</resources>
