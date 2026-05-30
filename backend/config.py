@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     twilio_from_number: str = ""
     twilio_test_to_number: str = ""
 
+    # Public URL this server is reachable at (used by Twilio to fetch TTS audio).
+    # In local dev: run `ngrok http 8000` and paste the https URL here.
+    backend_public_url: str = "http://localhost:8000"
+
+    # OpenAI API key used specifically for TTS (always needs the real OpenAI endpoint).
+    openai_api_key: str = ""
+
     # FHIR
     fhir_base_url: str = "http://hapi.fhir.org/baseR4"
 
