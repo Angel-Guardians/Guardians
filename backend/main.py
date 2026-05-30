@@ -60,6 +60,10 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/ping")
+    async def ping() -> dict[str, str]:
+        return {"message": "pong"}
+
     return app
 
 

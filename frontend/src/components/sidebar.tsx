@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { PingButton } from "@/components/ping-button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -21,7 +22,7 @@ export function Sidebar() {
         <p className="text-lg font-semibold text-sidebar-foreground">Guardian</p>
         <p className="text-xs text-muted-foreground">Home Emergency Companion</p>
       </div>
-      <nav className="flex flex-col gap-1">
+      <nav className="flex flex-1 flex-col gap-1">
         {NAV.map((item) => {
           const active =
             item.href === "/"
@@ -43,6 +44,7 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <PingButton />
     </aside>
   );
 }

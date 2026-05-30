@@ -34,6 +34,7 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => getJson<{ status: string }>("/health"),
+  ping: () => getJson<{ message: string }>("/ping"),
 
   listPatients: () => getJson<Patient[]>("/patient/"),
   getPatient: (id: number) => getJson<Patient>(`/patient/${id}`),
