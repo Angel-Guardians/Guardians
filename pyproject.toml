@@ -43,7 +43,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ui = [
+frontend = [
     "streamlit>=1.39",
     "plotly>=5.24",
 ]

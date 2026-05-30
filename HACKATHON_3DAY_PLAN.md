@@ -60,7 +60,7 @@ Done before Day 1 starts. If not, do it during Day 1 morning and slip everything
   ├── events/             # event bus
   ├── workers/            # Arq workers (slow-time)
   └── main.py
-  ui/                     # Streamlit app
+  frontend/               # Streamlit app
   ```
 - `pyproject.toml` deps: fastapi, uvicorn, sqlmodel, alembic, langgraph, langchain-ollama, pydantic, sounddevice, faster-whisper, kokoro, openwakeword, apscheduler, bleak, influxdb-client, sse-starlette, plotly
 - Initial Pydantic models in `backend/db/models.py`: `Patient`, `Incident`, `EventLogEntry`
@@ -235,7 +235,7 @@ If Llama 3.1 8B isn't pulled yet, do it now. Verify free VRAM ≥ 6GB with `nvid
 
 **Owner:** UI person.
 
-- `ui/app.py` with three pages: **Live**, **Vitals**, **Reminders**
+- `frontend/app.py` with three pages: **Live**, **Vitals**, **Reminders**
 - Backend exposes `GET /events/sse` using `sse-starlette`
 - **Live page:** SSE-driven Event Log table + current transcript pane
 - **Vitals page:** Plotly chart of HR over last 1h

@@ -58,7 +58,7 @@ guardian/
 │   └── workers/                # Arq workers (slow-time path)
 │       └── runner.py
 │
-├── ui/                         # Streamlit (hackathon); Next.js (production)
+├── frontend/                   # Streamlit (hackathon); Next.js (production)
 │   ├── app.py                  # Streamlit entry
 │   └── pages/                  # Multi-page Streamlit app
 │
@@ -93,7 +93,7 @@ guardian/
 | A new event type | `backend/events/types.py` (one Pydantic model per event) |
 | A new DB table | `backend/db/models.py`, then `alembic revision --autogenerate` |
 | A new external API integration | `backend/tools/integrations/<service>.py` |
-| A new UI page | `ui/pages/<N>_<Name>.py` |
+| A new UI page | `frontend/pages/<N>_<Name>.py` |
 | A new test scenario | `tests/scenarios/test_scenario_<NN>_<name>.py` |
 | A new background job | `backend/workers/<job>.py`, register in `backend/workers/runner.py` |
 

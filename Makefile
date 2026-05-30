@@ -1,10 +1,10 @@
 # Guardian - common dev commands
 # Usage: `make <target>`
 
-.PHONY: install seed migrate backend always-on workers ui test lint format demo-reset
+.PHONY: install seed migrate backend always-on workers frontend test lint format demo-reset
 
 install:
-	pip install -e ".[ui,dev]"
+	pip install -e ".[frontend,dev]"
 
 seed:
 	guardian-seed
@@ -21,17 +21,17 @@ always-on:
 workers:
 	guardian-workers
 
-ui:
-	streamlit run ui/app.py
+frontend:
+	streamlit run frontend/app.py
 
 test:
 	pytest
 
 lint:
-	ruff check backend ui tests scripts
+	ruff check backend frontend tests scripts
 
 format:
-	ruff format backend ui tests scripts
+	ruff format backend frontend tests scripts
 
 demo-reset:
 	python scripts/demo_reset.py
