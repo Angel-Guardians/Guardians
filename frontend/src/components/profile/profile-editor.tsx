@@ -27,12 +27,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
 import {
-  DEFAULT_PATIENT_PROFILE,
-  loadPatientProfile,
+  DEFAULT_PATIENT_ID,
+  EMPTY_PATIENT_PROFILE,
+  notifyProfileUpdated,
   profileInitials,
-  resetPatientProfile,
-  savePatientProfile,
 } from "@/lib/profile-storage";
 import type {
   EmergencyContact,
@@ -161,15 +161,30 @@ function TagInput({
 }
 
 export function ProfileEditor() {
-  const [profile, setProfile] = useState<PatientProfile>(DEFAULT_PATIENT_PROFILE);
-  const [savedProfile, setSavedProfile] = useState<PatientProfile>(DEFAULT_PATIENT_PROFILE);
+  const [profile, setProfile] = useState<PatientProfile>(EMPTY_PATIENT_PROFILE);
+  const [savedProfile, setSavedProfile] = useState<PatientProfile>(EMPTY_PATIENT_PROFILE);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loaded = loadPatientProfile();
-    setProfile(loaded);
-    setSavedProfile(loaded);
+  const loadProfile = useCallback(async () => {
+    setLoadState("loading");
+    setLoadError(null);
+    try {
+      const loaded = await api.getPatientProfile(DEFAULT_PATIENT_ID);
+      setProfile(loaded);
+      setSavedProfile(loaded);
+      setLoadState("ready");
+    } catch (err: unknown) {
+      setLoadState("error");
+      setLoadError(err instanceof Error ? err.message : "Failed to load profile");
+    }
   }, []);
+
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
 
   const isDirty = useMemo(
     () => !profileEquals(profile, savedProfile),
@@ -184,17 +199,52 @@ export function ProfileEditor() {
     [],
   );
 
-  function handleSave() {
-    savePatientProfile(profile);
-    setSavedProfile(profile);
-    setSaveNotice("Profile saved locally. Backend sync coming soon.");
+  async function handleSave() {
+    setSaving(true);
+    setSaveNotice(null);
+    try {
+      const { id, ...body } = profile;
+      const saved = await api.updatePatientProfile(id, body);
+      setProfile(saved);
+      setSavedProfile(saved);
+      notifyProfileUpdated(saved);
+      setSaveNotice("Profile saved to database.");
+    } catch (err: unknown) {
+      setSaveNotice(
+        err instanceof Error ? err.message : "Failed to save profile",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleReset() {
-    const fresh = resetPatientProfile();
-    setProfile(fresh);
-    setSavedProfile(fresh);
-    setSaveNotice("Restored demo profile.");
+  async function handleReload() {
+    await loadProfile();
+    setSaveNotice("Reloaded from database.");
+  }
+
+  if (loadState === "loading") {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading profile…</p>
+      </div>
+    );
+  }
+
+  if (loadState === "error") {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 py-12 text-center">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <p className="text-sm text-muted-foreground">
+          Make sure Postgres is running and you have seeded a patient (
+          <code className="rounded bg-muted px-1">make db-up seed</code>).
+        </p>
+        <Button type="button" variant="outline" onClick={() => void loadProfile()}>
+          <RotateCcw />
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -214,13 +264,18 @@ export function ProfileEditor() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={handleReset}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void handleReload()}>
             <RotateCcw />
-            Reset demo
+            Reload
           </Button>
-          <Button type="button" size="sm" disabled={!isDirty} onClick={handleSave}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!isDirty || saving}
+            onClick={() => void handleSave()}
+          >
             <Save />
-            Save profile
+            {saving ? "Saving…" : "Save profile"}
           </Button>
         </div>
       </div>
@@ -648,9 +703,14 @@ export function ProfileEditor() {
               >
                 Discard
               </Button>
-              <Button type="button" size="sm" onClick={handleSave}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={saving}
+                onClick={() => void handleSave()}
+              >
                 <Save />
-                Save profile
+                {saving ? "Saving…" : "Save profile"}
               </Button>
             </div>
           </div>

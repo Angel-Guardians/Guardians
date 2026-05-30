@@ -5,9 +5,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { api } from "@/lib/api";
 import {
-  DEFAULT_PATIENT_PROFILE,
-  loadPatientProfile,
+  DEFAULT_PATIENT_ID,
+  EMPTY_PATIENT_PROFILE,
   PROFILE_UPDATED_EVENT,
   profileInitials,
 } from "@/lib/profile-storage";
@@ -17,20 +18,26 @@ import { cn } from "@/lib/utils";
 export function ProfileCorner() {
   const pathname = usePathname();
   const active = pathname.startsWith("/profile");
-  const [profile, setProfile] = useState<PatientProfile>(DEFAULT_PATIENT_PROFILE);
+  const [profile, setProfile] = useState<PatientProfile>(EMPTY_PATIENT_PROFILE);
 
-  const refresh = useCallback(() => {
-    setProfile(loadPatientProfile());
+  const refresh = useCallback(async () => {
+    try {
+      const loaded = await api.getPatientProfile(DEFAULT_PATIENT_ID);
+      setProfile(loaded);
+    } catch {
+      // Keep last known profile; header stays usable offline.
+    }
   }, []);
 
   useEffect(() => {
-    refresh();
-    window.addEventListener(PROFILE_UPDATED_EVENT, refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener(PROFILE_UPDATED_EVENT, refresh);
-      window.removeEventListener("storage", refresh);
+    void refresh();
+    const onUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<PatientProfile>).detail;
+      if (detail) setProfile(detail);
+      else void refresh();
     };
+    window.addEventListener(PROFILE_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdated);
   }, [refresh]);
 
   const initials = profileInitials(profile.name);

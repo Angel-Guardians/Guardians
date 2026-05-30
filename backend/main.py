@@ -30,6 +30,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       - LLM client (Ollama)
     """
     configure_logging()
+    from backend.db.session import init_db
+
+    init_db()
     app.state.event_bus = EventBus()
     # TODO: start orchestrator, scheduler, subscribe sub-agents to bus
     yield
