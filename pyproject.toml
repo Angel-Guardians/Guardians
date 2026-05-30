@@ -9,10 +9,12 @@ license = { file = "LICENSE" }
 dependencies = [
     # LLM
     "openai>=1.0",
+    # Orchestration
+    "langgraph>=0.2",
+    # Observability
     "langsmith>=0.2",
     # Config
     "python-dotenv>=1.0",
-    # Observability
     "loguru>=0.7",
 ]
 

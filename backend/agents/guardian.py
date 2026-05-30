@@ -1,51 +1,114 @@
-"""Phase 0 — single Guardian agent.
+"""Guardian orchestrator (LangGraph).
 
-Direct OpenAI SDK calls, no graph framework.
-Phase 2 splits this into Orchestrator + SafetyAgent + CompanionAgent.
+Orchestration is a compiled LangGraph `StateGraph` (see backend/agents/graph.py).
+A hybrid router node — deterministic keyword fast-path for true emergencies, LLM
+classification for everything else — selects one of six specialist nodes via
+conditional edges. Every node talks only to the `backend.llm` interface, so the
+graph runs unchanged on OpenAI cloud or a local DGX Spark endpoint.
+
+Observability: with LANGSMITH_TRACING=true and LANGSMITH_API_KEY set, LangGraph
+traces each turn to LangSmith — one span per node, model calls nested beneath.
 """
 from __future__ import annotations
 
-import os
-from dotenv import load_dotenv
-from openai import OpenAI
-from langsmith import traceable
-from langsmith.wrappers import wrap_openai
+from backend.agents.behavior import BehaviorAgent
+from backend.agents.caregiver_liaison import CaregiverLiaisonAgent
+from backend.agents.companion import CompanionAgent
+from backend.agents.graph import build_guardian_graph
+from backend.agents.health import HealthAgent
+from backend.agents.reminder import ReminderAgent
+from backend.agents.safety import SafetyAgent
+from backend.llm import LLMClient, Message, build_llm
+from backend.llm.tracing import trace
+from backend.tools import ToolRegistry, build_default_registry
 
-load_dotenv()
+_ROUTES = ("safety", "reminder", "behavior", "caregiver", "health", "companion")
 
-SYSTEM_PROMPT = """\
-You are Guardian, a calm and caring AI companion living in the patient's home.
-Your role is to be a trusted presence — keeping the patient safe, helping them
-remember things, and being there when they need someone to talk to.
+# Deterministic safety net: if any of these appear, route to safety without asking
+# the model. Cheap insurance against a misclassification on the one path that matters.
+_SAFETY_KEYWORDS = (
+    "fell",
+    "fallen",
+    "can't get up",
+    "cant get up",
+    "chest pain",
+    "chest feels tight",
+    "can't breathe",
+    "cant breathe",
+    "difficulty breathing",
+    "trouble breathing",
+    "unconscious",
+    "not breathing",
+    "bleeding",
+    "stroke",
+    "help me",
+)
 
-Guidelines:
-- Keep responses SHORT and clear. You are speaking aloud, not typing.
-- Use plain, warm language. Avoid bullet points or markdown.
-- If the patient sounds distressed or mentions a physical symptom, ask one
-  focused clarifying question.
-- If they describe a fall, chest pain, difficulty breathing, or an emergency,
-  tell them clearly that help is coming and stay with them.
+_ROUTER_PROMPT = """\
+You are a triage router for a home-care AI companion.
+Classify the patient message as exactly one of:
 
-Patient on file: Eleanor, 70 years old, lives alone. Known cardiac history.
-Emergency contact: Maria (daughter, +1-416-555-0192).
-Medications: metoprolol 50 mg (morning), aspirin 81 mg (morning).
+  safety    — fall, chest pain, difficulty breathing, severe pain, or any
+              situation needing immediate emergency help.
+  reminder  — medication reminders, appointment questions, daily schedule.
+  behavior  — mood shifts, withdrawal, confusion, sleep or appetite changes.
+  caregiver — contacting family, sending a message to Maria, sharing an update.
+  health    — symptoms, vitals, medication questions, chronic conditions.
+  companion — everything else: conversation, memory, emotional support.
+
+Reply with exactly one word from the list above.
 """
 
 
 class GuardianAgent:
-    def __init__(self) -> None:
-        self._client = wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
-        self._model = os.getenv("OPENAI_MODEL", "gpt-4o")
-        self._history: list[dict[str, str]] = []
+    def __init__(
+        self,
+        llm: LLMClient | None = None,
+        registry: ToolRegistry | None = None,
+    ) -> None:
+        # Single integration point: build the client once and inject it everywhere.
+        self._llm = llm or build_llm()
+        self._registry = registry or build_default_registry()
+        self._history: list[Message] = []
+        self._agents = {
+            "safety": SafetyAgent(self._llm, self._registry),
+            "companion": CompanionAgent(self._llm, self._registry),
+            "reminder": ReminderAgent(self._llm, self._registry),
+            "behavior": BehaviorAgent(self._llm, self._registry),
+            "caregiver": CaregiverLiaisonAgent(self._llm, self._registry),
+            "health": HealthAgent(self._llm, self._registry),
+        }
+        # Compile the LangGraph orchestrator once.
+        self._graph = build_guardian_graph(self.route, self._agents)
 
-    @traceable(name="guardian-chat")
-    def chat(self, user_message: str) -> str:
-        self._history.append({"role": "user", "content": user_message})
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}, *self._history]
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=messages,
+    @trace(name="guardian-router")
+    def route(self, message: str) -> str:
+        lowered = message.lower()
+        if any(kw in lowered for kw in _SAFETY_KEYWORDS):
+            return "safety"
+
+        response = self._llm.chat(
+            [
+                Message(role="system", content=_ROUTER_PROMPT),
+                Message(role="user", content=message),
+            ],
+            max_tokens=8,
+            temperature=0.0,
         )
-        reply: str = response.choices[0].message.content
-        self._history.append({"role": "assistant", "content": reply})
+        label = (response.text or "").strip().lower()
+        for route in _ROUTES:
+            if route in label:
+                return route
+        return "companion"
+
+    def chat(self, user_message: str) -> str:
+        # Invoke the compiled graph for this turn. LangGraph traces the run to
+        # LangSmith automatically when tracing env vars are set.
+        result = self._graph.invoke(
+            {"user_message": user_message, "history": list(self._history)},
+            config={"run_name": "guardian-turn"},
+        )
+        reply = result["reply"]
+        self._history.append(Message(role="user", content=user_message))
+        self._history.append(Message(role="assistant", content=reply))
         return reply
