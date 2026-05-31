@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 from loguru import logger
 
+from backend.events.log import persist_event_log
 from backend.events.types import GuardianEvent
 
 
@@ -36,7 +37,19 @@ class EventBus:
 
     async def publish(self, event: GuardianEvent) -> None:
         """Persist-then-publish. The persistence step is the audit trail."""
-        # TODO: write to EventLogEntry BEFORE routing (ARCHITECTURE.md sec. 3.3)
+        # Write to the Event Log BEFORE routing (ARCHITECTURE.md sec. 3.3).
+        # `tool_invocation` events are skipped here: they're persisted at the tool
+        # boundary by @audit_log (with full args + result), so the trail stays
+        # complete on headless / event-driven paths that never reach this bus.
+        event_type = getattr(event, "type", event.__class__.__name__)
+        if event_type != "tool_invocation":
+            persist_event_log(
+                source=event.source,
+                event_type=event_type,
+                payload=event.to_log_payload(),
+                severity=event.severity,
+                incident_id=event.incident_id,
+            )
         await self._queue.put(event)
 
     async def start(self) -> None:

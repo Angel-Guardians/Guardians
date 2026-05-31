@@ -12,6 +12,7 @@ import os
 from typing import Any
 
 from backend.llm.base import ToolSpec
+from backend.tools.decorators import audit_log, consent_check, idempotent
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,6 +20,8 @@ load_dotenv()
 CALL_LOG: list[dict[str, Any]] = []
 
 
+@audit_log
+@idempotent(window_seconds=60)
 def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
     """Call emergency services via Twilio <Say>.
 
@@ -75,6 +78,9 @@ def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
     return event
 
 
+@audit_log
+@consent_check(recipient="family", data_category="status_update")
+@idempotent(window_seconds=60)
 def notify_caregiver(
     message: str,
     contact: str = "Sophie",

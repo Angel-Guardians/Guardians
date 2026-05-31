@@ -10,6 +10,7 @@ import os
 from typing import Any
 
 from backend.llm.base import ToolSpec
+from backend.tools.decorators import audit_log, consent_check, idempotent
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -34,6 +35,9 @@ def _resolve_phone(person: str, phone: str) -> str:
     return _build_contact_book().get(person.lower(), "")
 
 
+@audit_log
+@consent_check(recipient="contact", data_category="status_update")
+@idempotent(window_seconds=60)
 def call_person(
     person: str,
     message: str,
