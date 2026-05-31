@@ -73,6 +73,15 @@ export interface VitalSeries {
   points: VitalPoint[];
 }
 
+// A fall event from the watch: fall_suspected (detected / demo) then
+// fall_confirmed (no response) or fall_cancelled ("I'm OK").
+export interface FallEvent {
+  kind: string;
+  value: number; // peak impact (g)
+  ts: string; // ISO timestamp (UTC)
+  source: string;
+}
+
 export interface Medication {
   id: number;
   name: string;

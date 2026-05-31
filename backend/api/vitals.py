@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select
 
 from backend.api.schemas import (
+    FallEventRead,
     VitalIngestBatch,
     VitalIngestResult,
     VitalPoint,
@@ -90,3 +91,30 @@ def read_vitals(
     rows = session.exec(stmt).all()
     points = [VitalPoint(ts=row.ts.isoformat(), value=row.value) for row in rows]
     return VitalSeries(kind=kind, points=points)
+
+
+@router.get("/falls", response_model=list[FallEventRead])
+def list_falls(
+    since: str = Query("24h", description="Look-back window, e.g. 24h, 60m, 7d"),
+    patient_id: int = Query(1),
+    session: Session = Depends(get_session),
+) -> list[FallEventRead]:
+    """Recent fall events (suspected / confirmed / cancelled), newest first."""
+    cutoff = datetime.utcnow() - _parse_since(since)
+    stmt = (
+        select(Vital)
+        .where(Vital.patient_id == patient_id)
+        .where(Vital.kind.like("fall%"))
+        .where(Vital.ts >= cutoff)
+        .order_by(Vital.ts.desc())
+    )
+    rows = session.exec(stmt).all()
+    return [
+        FallEventRead(
+            kind=row.kind,
+            value=row.value,
+            ts=row.ts.isoformat() + "Z",
+            source=row.source,
+        )
+        for row in rows
+    ]

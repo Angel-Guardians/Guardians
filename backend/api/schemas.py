@@ -96,6 +96,13 @@ class VitalSeries(BaseModel):
     points: list[VitalPoint] = Field(default_factory=list)
 
 
+class FallEventRead(BaseModel):
+    kind: str  # fall_suspected | fall_confirmed | fall_cancelled
+    value: float  # peak impact (g)
+    ts: str  # ISO-8601 (UTC, trailing Z)
+    source: str
+
+
 # ---------------------------------------------------------------------------
 # Lab / health records (document + parsed observation rows)
 # ---------------------------------------------------------------------------

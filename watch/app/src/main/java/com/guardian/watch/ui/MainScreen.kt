@@ -32,6 +32,7 @@ fun MainScreen(
     state: MonitorUiState,
     onToggleMonitoring: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
+    onTestFall: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val listState = rememberScalingLazyListState()
@@ -110,6 +111,24 @@ fun MainScreen(
             }
 
             item {
+                Text(
+                    "Safety",
+                    style = MaterialTheme.typography.caption1,
+                    color = MaterialTheme.colors.onSurfaceVariant,
+                )
+            }
+            item { FallStatus(kind = state.fallKind, at = state.fallAt) }
+            item {
+                Chip(
+                    onClick = onTestFall,
+                    label = { Text("Test fall alert") },
+                    secondaryLabel = { Text("send a fall to the server") },
+                    colors = ChipDefaults.secondaryChipColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            item {
                 Chip(
                     onClick = onSyncNow,
                     label = { Text("Sync now") },
@@ -143,6 +162,31 @@ private fun Metric(value: String, label: String) {
             style = MaterialTheme.typography.caption2,
             color = MaterialTheme.colors.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun FallStatus(kind: String?, at: Long) {
+    val (label, color) = when (kind) {
+        "fall_confirmed" -> "Fall confirmed" to MaterialTheme.colors.error
+        "fall_suspected" -> "Fall suspected" to MaterialTheme.colors.error
+        "fall_cancelled" -> "Marked OK" to MaterialTheme.colors.primary
+        else -> "No falls detected" to MaterialTheme.colors.onSurfaceVariant
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, style = MaterialTheme.typography.title3, color = color)
+        if (kind != null && at > 0L) {
+            Text(
+                DateUtils.getRelativeTimeSpanString(
+                    at, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
+                ).toString(),
+                style = MaterialTheme.typography.caption2,
+                color = MaterialTheme.colors.onSurfaceVariant,
+            )
+        }
     }
 }
 

@@ -5,6 +5,7 @@
 
 import type {
   AdminTablesResponse,
+  FallEvent,
   Medication,
   Patient,
   PatientProfile,
@@ -78,6 +79,9 @@ export const api = {
   // Implemented: GET /vitals?kind=&since= (served from the Vital table; watch feeds it).
   getVitals: (kind: VitalKind, since = "24h") =>
     getJson<VitalSeries>(`/vitals?kind=${kind}&since=${since}`),
+
+  // Recent fall events from the watch (newest first).
+  getFalls: (since = "24h") => getJson<FallEvent[]>(`/vitals/falls?since=${since}`),
 
   // TODO(backend): GET /medications?patient_id= not implemented yet.
   listMedications: (patientId: number) =>

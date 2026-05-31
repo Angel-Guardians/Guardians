@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useDemoPipeline } from "@/hooks/useDemoPipeline";
 import { useEventStream, type StreamStatus } from "@/hooks/useEventStream";
 import { usePipelineFromEvents } from "@/hooks/usePipelineFromEvents";
 import { initialPipelineState, type PipelineState } from "@/lib/pipeline-state";
@@ -52,13 +53,11 @@ export default function LivePage() {
     initialPipelineState,
   );
 
+  const demo = useDemoPipeline(setDemoPipeline, () => setMode("demo"));
+
   const ssePipeline = usePipelineFromEvents(events, mode === "live");
 
   const pipeline = mode === "live" ? ssePipeline : demoPipeline;
-
-  const handleReset = useCallback(() => {
-    setDemoPipeline(initialPipelineState());
-  }, []);
 
   const transcript = useMemo(
     () =>
@@ -72,6 +71,14 @@ export default function LivePage() {
 
   const displayTranscript = pipeline.transcript || transcript;
 
+  const handleGraphDemo = useCallback(
+    (preset: Parameters<typeof demo.runScenario>[0]) => {
+      setMode("demo");
+      demo.runScenario(preset);
+    },
+    [demo],
+  );
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -80,18 +87,27 @@ export default function LivePage() {
         action={<StatusBadge status={status} />}
       />
 
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader className="pb-2">
+      <Card className="overflow-hidden rounded-2xl border-0 bg-transparent shadow-none">
+        <CardHeader className="px-0 pb-2">
           <CardTitle>Agent pipeline</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Left to right: input → router → specialist → tools. Use the demo bar
+            below the graph to preview the flow.
+          </p>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <AgentPipelineGraph pipeline={pipeline} />
+        <CardContent className="space-y-4 p-0">
+          <AgentPipelineGraph
+            pipeline={pipeline}
+            onRunDemo={handleGraphDemo}
+            onReset={demo.reset}
+            isPlaying={demo.isPlaying}
+            activeScenarioId={demo.scenario?.id ?? null}
+          />
           <LiveTurnPanel
             pipeline={pipeline}
             mode={mode}
             onModeChange={setMode}
-            onPipelineChange={setDemoPipeline}
-            onReset={handleReset}
+            demo={demo}
           />
         </CardContent>
       </Card>

@@ -20,6 +20,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 
+    <!-- Fall alert: buzz + full-screen "Are you OK?" prompt -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <!-- Health Connect reads (Wear OS 5+ / modern phones). Harmless where absent. -->
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
@@ -71,6 +75,17 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Full-screen "Are you OK?" prompt shown when a fall is suspected. -->
+        <activity
+            android:name=".ui.FallAlertActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault"
+            android:turnScreenOn="true" />
 
         <!-- Foreground service: continuous HR measurement + 1-minute sync loop. -->
         <service

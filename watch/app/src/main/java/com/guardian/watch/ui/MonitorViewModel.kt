@@ -25,6 +25,8 @@ data class MonitorUiState(
     val lastSyncStatus: String = "",
     val baseUrl: String = "",
     val patientId: Int = 1,
+    val fallKind: String? = null,
+    val fallAt: Long = 0L,
 )
 
 class MonitorViewModel(app: Application) : AndroidViewModel(app) {
@@ -64,7 +66,7 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     ) { at, status -> Sync(at, status) }
 
     val uiState: StateFlow<MonitorUiState> =
-        combine(vitals, healthConnect, config, sync) { v, h, c, s ->
+        combine(vitals, healthConnect, config, sync, repo.latestFall()) { v, h, c, s, fall ->
             MonitorUiState(
                 monitoring = c.monitoring,
                 heartRate = v.hr,
@@ -79,6 +81,8 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
                 lastSyncStatus = s.status,
                 baseUrl = c.baseUrl,
                 patientId = c.patientId,
+                fallKind = fall?.kind,
+                fallAt = fall?.ts ?: 0L,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MonitorUiState())
 
@@ -94,6 +98,15 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             settings.setBaseUrl(baseUrl)
             settings.setPatientId(patientId)
+        }
+    }
+
+    /** Demo/QA: fire a fall straight at the server to test the alert pipeline. */
+    fun simulateFall() {
+        viewModelScope.launch {
+            // Routed through the real "fall_suspected" path; 3.5 g ≈ a plausible impact.
+            repo.record(kind = "fall_suspected", value = 3.5)
+            runCatching { repo.syncOnce() }
         }
     }
 

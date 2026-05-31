@@ -1,104 +1,53 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DEMO_SCENARIOS, type DemoScenario } from "@/lib/agent-graph";
-import {
-  applyStep,
-  initialPipelineState,
-  stepLabel,
-  type PipelineState,
-} from "@/lib/pipeline-state";
+import { DEMO_SCENARIOS } from "@/lib/agent-graph";
+import { stepLabel, type PipelineState } from "@/lib/pipeline-state";
 import { api } from "@/lib/api";
+import type { useDemoPipeline } from "@/hooks/useDemoPipeline";
 import { cn } from "@/lib/utils";
 
 export type LiveMode = "demo" | "live";
+
+type DemoControls = ReturnType<typeof useDemoPipeline>;
 
 interface LiveTurnPanelProps {
   pipeline: PipelineState;
   mode: LiveMode;
   onModeChange: (mode: LiveMode) => void;
-  onPipelineChange: (state: PipelineState) => void;
-  onReset: () => void;
+  demo: DemoControls;
 }
 
 export function LiveTurnPanel({
   pipeline,
   mode,
   onModeChange,
-  onPipelineChange,
-  onReset,
+  demo,
 }: LiveTurnPanelProps) {
   const [input, setInput] = useState("");
-  const [scenario, setScenario] = useState<DemoScenario | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => clearTimer(), [clearTimer]);
-
-  const runDemoSteps = useCallback(
-    (steps: DemoScenario["steps"], startText: string) => {
-      clearTimer();
-      onModeChange("demo");
-      let state = initialPipelineState();
-      let index = 0;
-
-      const tick = () => {
-        if (index >= steps.length) return;
-        const step = steps[index];
-        state = applyStep(state, step, index + 1, steps.length);
-        onPipelineChange(state);
-        index += 1;
-        if (index < steps.length) {
-          timerRef.current = setTimeout(tick, 700);
-        }
-      };
-
-      tick();
-      setInput(startText);
-    },
-    [clearTimer, onModeChange, onPipelineChange],
-  );
-
-  const handlePreset = (preset: DemoScenario) => {
-    setScenario(preset);
+  const handlePreset = (preset: (typeof DEMO_SCENARIOS)[number]) => {
     setError(null);
-    runDemoSteps(preset.steps, preset.inputText);
+    onModeChange("demo");
+    setInput(demo.runScenario(preset));
   };
 
   const handleAdvance = () => {
-    if (!scenario) return;
-    clearTimer();
     onModeChange("demo");
-    const nextIndex = pipeline.stepIndex;
-    if (nextIndex >= scenario.steps.length) return;
-    const step = scenario.steps[nextIndex];
-    const base =
-      nextIndex === 0 && !pipeline.currentStep
-        ? initialPipelineState()
-        : pipeline;
-    const state = applyStep(base, step, nextIndex + 1, scenario.steps.length);
-    onPipelineChange(state);
-    if (nextIndex === 0) setInput(scenario.inputText);
+    demo.advanceStep(pipeline);
+    if (demo.scenario) setInput(demo.scenario.inputText);
   };
 
   const handleReset = () => {
-    clearTimer();
-    setScenario(null);
     setError(null);
     setInput("");
-    onReset();
+    demo.reset();
   };
 
   const handleSend = async () => {
@@ -107,10 +56,9 @@ export function LiveTurnPanel({
     setSending(true);
     setError(null);
     onModeChange("live");
-    clearTimer();
+    demo.clearTimer();
     try {
       await api.turn(text);
-      // Pipeline updates via SSE in parent
     } catch (e) {
       setError(e instanceof Error ? e.message : "Turn failed");
     } finally {
@@ -188,13 +136,19 @@ export function LiveTurnPanel({
             key={preset.id}
             variant="secondary"
             size="sm"
+            disabled={demo.isPlaying}
             onClick={() => handlePreset(preset)}
           >
             {preset.label}
           </Button>
         ))}
-        {mode === "demo" && scenario ? (
-          <Button variant="outline" size="sm" onClick={handleAdvance}>
+        {mode === "demo" && demo.scenario ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={demo.isPlaying}
+            onClick={handleAdvance}
+          >
             Advance step
           </Button>
         ) : null}
@@ -203,7 +157,7 @@ export function LiveTurnPanel({
       {mode === "demo" && pipeline.totalSteps > 0 ? (
         <p className="text-xs text-muted-foreground">
           Step {pipeline.stepIndex} of {pipeline.totalSteps}
-          {scenario ? ` — ${scenario.description}` : ""}
+          {demo.scenario ? ` — ${demo.scenario.description}` : ""}
         </p>
       ) : null}
     </div>
