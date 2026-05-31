@@ -36,6 +36,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.event_bus = EventBus()
     await app.state.event_bus.start()
 
+    # Voice monitor: fans the watch's live mic stream out to dashboard listeners
+    # (the Live page speaker). See backend/api/voice.py.
+    from backend.voice.monitor import VoiceMonitor
+
+    app.state.voice_monitor = VoiceMonitor()
+
     # Build the orchestrator once. If the LLM isn't configured yet (no key), don't
     # crash the whole API — log it; /turn will surface the error on first use.
     try:

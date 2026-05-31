@@ -78,9 +78,13 @@ async def _handle_utterance(websocket: WebSocket, pcm: bytes, sample_rate: int, 
         await websocket.send_json({"type": "error", "message": "Agent not configured."})
         return
 
+    monitor = ctx.monitor
+
     # 1) Speech -> text (blocking model work off the loop).
     text = (await asyncio.to_thread(transcribe_pcm, pcm, sample_rate)).strip()
     await websocket.send_json({"type": "transcript", "text": text})
+    if monitor is not None:
+        monitor.broadcast_event({"type": "transcript", "text": text})
     if not text:
         return  # silence / no speech detected; nothing to answer
     if bus is not None:
@@ -91,6 +95,8 @@ async def _handle_utterance(websocket: WebSocket, pcm: bytes, sample_rate: int, 
     reply = result.get("reply", "")
     route = result.get("route", "companion")
     await websocket.send_json({"type": "reply", "text": reply, "route": route})
+    if monitor is not None:
+        monitor.broadcast_event({"type": "reply", "text": reply, "route": route})
     if bus is not None:
         await bus.publish(AgentReplyEvent(source=f"agent.{route}", agent=route, text=reply))
 
@@ -107,6 +113,7 @@ class _Ctx:
     def __init__(self, websocket: WebSocket) -> None:
         self.guardian = websocket.app.state.guardian
         self.bus = getattr(websocket.app.state, "event_bus", None)
+        self.monitor = getattr(websocket.app.state, "voice_monitor", None)
 
 
 @router.websocket("/ws")
@@ -127,6 +134,9 @@ async def voice_ws(websocket: WebSocket) -> None:
             if data is not None:
                 if capturing:
                     buffer.extend(data)
+                    # Fan the live mic frame out to any dashboard listeners.
+                    if ctx.monitor is not None and ctx.monitor.has_listeners:
+                        ctx.monitor.broadcast_audio(bytes(data))
                     if len(buffer) > _MAX_UTTERANCE_BYTES:
                         await websocket.send_json(
                             {"type": "error", "message": "Utterance too long."}
@@ -149,12 +159,18 @@ async def voice_ws(websocket: WebSocket) -> None:
                 buffer.clear()
                 capturing = True
                 sample_rate = int(control.get("sample_rate", 16_000))
+                if ctx.monitor is not None:
+                    ctx.monitor.broadcast_event(
+                        {"type": "mic_begin", "sample_rate": sample_rate}
+                    )
             elif kind == "end":
                 if not capturing:
                     continue
                 capturing = False
                 pcm = bytes(buffer)
                 buffer.clear()
+                if ctx.monitor is not None:
+                    ctx.monitor.broadcast_event({"type": "mic_end"})
                 try:
                     await _handle_utterance(websocket, pcm, sample_rate, ctx)
                 except Exception as exc:  # noqa: BLE001 — one bad turn shouldn't kill the socket
@@ -165,3 +181,43 @@ async def voice_ws(websocket: WebSocket) -> None:
         pass
     except Exception:  # noqa: BLE001
         logger.exception("voice websocket error")
+
+
+@router.websocket("/listen")
+async def voice_listen(websocket: WebSocket) -> None:
+    """Dashboard speaker feed: relay the live watch mic stream to a browser.
+
+    Sends control as JSON text frames (mic_begin/mic_end/transcript/reply) and the
+    raw 16-bit mono PCM as binary frames. The Live page plays it via Web Audio.
+    """
+    await websocket.accept()
+    monitor = getattr(websocket.app.state, "voice_monitor", None)
+    if monitor is None:
+        await websocket.close()
+        return
+
+    queue = monitor.subscribe()
+
+    async def drain_incoming() -> None:
+        # We don't expect inbound data, but reading lets us notice a client close.
+        try:
+            while True:
+                await websocket.receive()
+        except Exception:  # noqa: BLE001
+            pass
+
+    reader = asyncio.create_task(drain_incoming())
+    try:
+        while True:
+            kind, item = await queue.get()
+            if kind == "audio":
+                await websocket.send_bytes(item)  # type: ignore[arg-type]
+            else:
+                await websocket.send_json(item)  # type: ignore[arg-type]
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    except Exception:  # noqa: BLE001
+        logger.exception("voice listen websocket error")
+    finally:
+        monitor.unsubscribe(queue)
+        reader.cancel()

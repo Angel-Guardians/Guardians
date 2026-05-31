@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AgentPipelineGraph } from "@/components/agent-pipeline-graph";
 import { LiveTurnPanel, type LiveMode } from "@/components/live-turn-panel";
 import { PageHeader } from "@/components/page-header";
+import { VoiceSpeaker } from "@/components/voice-speaker";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -157,20 +158,24 @@ export default function LivePage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader>
-            <CardTitle>Active transcript</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {displayTranscript ? (
-              <p className="text-sm leading-relaxed">{displayTranscript}</p>
-            ) : (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                No speech transcribed yet.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <VoiceSpeaker />
+
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader>
+              <CardTitle>Active transcript</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {displayTranscript ? (
+                <p className="text-sm leading-relaxed">{displayTranscript}</p>
+              ) : (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  No speech transcribed yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
