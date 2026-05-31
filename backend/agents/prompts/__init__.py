@@ -7,7 +7,7 @@ and agents read their prompt via `get_prompt(name)` instead of hardcoding a stri
 
 How to use:
 - Edit prompt wording          -> the per-agent file (e.g. `safety.py`).
-- Edit Eleanor's details       -> `_base.py` (PATIENT_CONTEXT), applies everywhere.
+- Edit the patient context     -> `_base.py` (built from the DB profile at runtime).
 - Switch which version is live -> `active.toml` (no Python changes).
 - A/B a new prompt version     -> add `"v2": ...` to that agent's VERSIONS dict,
                                   then set its line in `active.toml` to "v2".

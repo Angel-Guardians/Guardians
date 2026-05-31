@@ -21,13 +21,18 @@ from backend.llm.base import ToolSpec
 CALL_LOG: list[dict[str, Any]] = []
 
 _FALLBACK_SCHEDULE = [
-    {"time": "08:00", "what": "metoprolol 50 mg + aspirin 81 mg"},
+    {"time": "08:00", "what": "morning medication"},
     {"time": "12:30", "what": "lunch"},
-    {"time": "15:00", "what": "call with Maria"},
+    {"time": "15:00", "what": "call with family"},
 ]
 
 
 def _default_patient_id(session: Session) -> int | None:
+    from backend.tools._active_patient import get_active_patient
+
+    active = get_active_patient()
+    if active is not None:
+        return active
     return session.exec(select(Patient.id).order_by(Patient.id)).first()
 
 

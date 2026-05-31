@@ -7,9 +7,9 @@ from backend.agents.prompts import get_prompt
 class SafetyAgent(ToolCallingAgent):
     name = "safety"
     system_prompt = get_prompt("safety")
-    # Safety is the only agent that can reach emergency dispatch. It holds the full
-    # outbound action set: 911, the caregiver, an arbitrary contact (e.g. a
-    # neighbour), and the cool-space lookup for heat emergencies.
-    tool_names = ("call_911", "notify_caregiver", "call_person", "find_cool_space")
+    # Safety is the only agent that can reach emergency dispatch. Its action set is
+    # the emergency line (call_911), the patient's caregivers (notify_caregiver), and
+    # an arbitrary contact such as a neighbour (call_person).
+    tool_names = ("call_911", "notify_caregiver", "call_person")
     voice_profile = "urgent"
     escalation_ceiling = "tier_4_call"

@@ -13,7 +13,16 @@ from backend.db.models import EmergencyContact, Patient
 
 
 def default_patient_id(session: Session) -> int | None:
-    """The single-home patient: the first patient on file, or None if unseeded."""
+    """The patient whose contacts a tool should resolve.
+
+    Prefers the patient the current turn is serving (set by GuardianAgent.turn());
+    falls back to the first patient on file when unset, or None if unseeded.
+    """
+    from backend.tools._active_patient import get_active_patient
+
+    active = get_active_patient()
+    if active is not None:
+        return active
     return session.exec(select(Patient.id).order_by(Patient.id)).first()
 
 

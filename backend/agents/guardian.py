@@ -199,6 +199,11 @@ class GuardianAgent:
         """
         if patient_id is not None:
             self.set_patient(patient_id)
+        # Tell the tool layer which patient this turn serves, so caregiver/health/
+        # reminder lookups resolve THIS patient's data instead of always patient #1.
+        from backend.tools._active_patient import set_active_patient
+
+        set_active_patient(self._patient_id)
         from backend.tools import emergency, general_tools, health, reminder
 
         logs = (emergency.CALL_LOG, general_tools.CALL_LOG, health.CALL_LOG, reminder.CALL_LOG)

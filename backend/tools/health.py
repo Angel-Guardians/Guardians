@@ -29,7 +29,12 @@ _FALLBACK_MEDS = [
 
 
 def _default_patient_id(session: Session) -> int | None:
-    """The single-home patient. Returns the first patient id, or None if unseeded."""
+    """The patient the current turn is serving, else the first patient id, or None."""
+    from backend.tools._active_patient import get_active_patient
+
+    active = get_active_patient()
+    if active is not None:
+        return active
     return session.exec(select(Patient.id).order_by(Patient.id)).first()
 
 

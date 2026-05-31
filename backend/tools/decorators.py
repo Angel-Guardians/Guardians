@@ -140,7 +140,11 @@ def _consent_allows(recipient: str, data_category: str) -> bool:
         from backend.db.session import engine
 
         with Session(engine) as session:
-            patient_id = session.exec(select(Patient.id).order_by(Patient.id)).first()
+            from backend.tools._active_patient import get_active_patient
+
+            patient_id = get_active_patient() or session.exec(
+                select(Patient.id).order_by(Patient.id)
+            ).first()
             if patient_id is None:
                 return True
             row = session.exec(
