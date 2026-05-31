@@ -29,7 +29,6 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import {
-  DEFAULT_PATIENT_ID,
   EMPTY_PATIENT_PROFILE,
   notifyProfileUpdated,
   profileInitials,
@@ -172,7 +171,7 @@ export function ProfileEditor() {
     setLoadState("loading");
     setLoadError(null);
     try {
-      const loaded = await api.getPatientProfile(DEFAULT_PATIENT_ID);
+      const loaded = await api.getPatientProfile();
       setProfile(loaded);
       setSavedProfile(loaded);
       setLoadState("ready");

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
 import {
-  DEFAULT_PATIENT_ID,
+  ACTIVE_PATIENT_CHANGED_EVENT,
   EMPTY_PATIENT_PROFILE,
   PROFILE_UPDATED_EVENT,
   profileInitials,
@@ -22,7 +22,7 @@ export function ProfileCorner() {
 
   const refresh = useCallback(async () => {
     try {
-      const loaded = await api.getPatientProfile(DEFAULT_PATIENT_ID);
+      const loaded = await api.getPatientProfile();
       setProfile(loaded);
     } catch {
       // Keep last known profile; header stays usable offline.
@@ -37,7 +37,11 @@ export function ProfileCorner() {
       else void refresh();
     };
     window.addEventListener(PROFILE_UPDATED_EVENT, onUpdated);
-    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdated);
+    window.addEventListener(ACTIVE_PATIENT_CHANGED_EVENT, refresh);
+    return () => {
+      window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdated);
+      window.removeEventListener(ACTIVE_PATIENT_CHANGED_EVENT, refresh);
+    };
   }, [refresh]);
 
   const initials = profileInitials(profile.name);
