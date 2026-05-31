@@ -7,6 +7,8 @@ import { LiveTurnPanel, type LiveMode } from "@/components/live-turn-panel";
 import { PageHeader } from "@/components/page-header";
 import { VoiceSpeaker } from "@/components/voice-speaker";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -48,11 +50,24 @@ const PIPELINE_EVENT_KINDS = new Set([
 ]);
 
 export default function LivePage() {
-  const { events, status } = useEventStream();
+  const { events, status, clearEvents } = useEventStream();
   const [mode, setMode] = useState<LiveMode>("demo");
+  const [resetting, setResetting] = useState(false);
   const [demoPipeline, setDemoPipeline] = useState<PipelineState>(
     initialPipelineState,
   );
+
+  // Wipe the agent's conversation memory (and the visible event log) so a test
+  // or demo run starts from a clean slate. Calls POST /turn/reset.
+  const handleReset = useCallback(async () => {
+    setResetting(true);
+    try {
+      await api.resetContext();
+      clearEvents();
+    } finally {
+      setResetting(false);
+    }
+  }, [clearEvents]);
 
   const demo = useDemoPipeline(setDemoPipeline, () => setMode("demo"));
 
@@ -85,7 +100,19 @@ export default function LivePage() {
       <PageHeader
         title="Live"
         description="Agent pipeline, real-time events, and active transcript from Guardian."
-        action={<StatusBadge status={status} />}
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReset}
+              disabled={resetting}
+            >
+              {resetting ? "Resetting..." : "Reset context"}
+            </Button>
+            <StatusBadge status={status} />
+          </div>
+        }
       />
 
       <Card className="overflow-hidden rounded-2xl shadow-sm">

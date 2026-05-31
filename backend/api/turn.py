@@ -69,6 +69,19 @@ def _event_for(kind: str, payload: dict):
     return None
 
 
+@router.post("/reset")
+async def reset_context(request: Request) -> dict:
+    """Clear the agent's conversation memory so tests/demos start from a clean slate.
+
+    The frontend can call this on page load/refresh so a fresh session doesn't
+    inherit the previous run's history.
+    """
+    guardian = request.app.state.guardian
+    if guardian is not None:
+        guardian.reset()
+    return {"ok": True}
+
+
 @router.post("/", response_model=TurnResponse)
 async def take_turn(body: TurnRequest, request: Request) -> TurnResponse:
     guardian = request.app.state.guardian

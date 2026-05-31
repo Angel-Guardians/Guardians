@@ -10,6 +10,7 @@ export type StreamStatus = "connecting" | "open" | "closed";
 interface UseEventStream {
   events: GuardianEvent[];
   status: StreamStatus;
+  clearEvents: () => void;
 }
 
 /**
@@ -49,5 +50,5 @@ export function useEventStream(maxEvents = 200): UseEventStream {
     return () => source.close();
   }, [maxEvents]);
 
-  return { events, status };
+  return { events, status, clearEvents: () => setEvents([]) };
 }

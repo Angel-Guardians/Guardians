@@ -106,6 +106,10 @@ export const api = {
       { method: "POST", body: JSON.stringify({ text, patient_id: patientId }) },
     ),
 
+  // Clear the agent's conversation memory so a fresh session/test starts clean.
+  resetContext: () =>
+    sendJson<{ ok: boolean }>("/turn/reset", { method: "POST" }),
+
   // Implemented: GET /vitals?kind=&since= (served from the Vital table; watch feeds it).
   getVitals: (kind: VitalKind, since = "24h") =>
     getJson<VitalSeries>(`/vitals?kind=${kind}&since=${since}`),

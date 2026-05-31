@@ -21,6 +21,7 @@ from backend.agents.safety import SafetyAgent
 from backend.llm import LLMClient, Message, build_llm
 from backend.llm.tracing import trace
 from backend.tools import ToolRegistry, build_default_registry
+from loguru import logger
 
 _ROUTES = ("safety", "reminder", "behavior", "caregiver", "health", "companion")
 
@@ -45,18 +46,39 @@ _SAFETY_KEYWORDS = (
 )
 
 _ROUTER_PROMPT = """\
-You are a triage router for a home-care AI companion.
-Classify the patient message as exactly one of:
+You are the triage router for a home-care AI companion that supports a person
+living alone. Read the person's latest message and reply with exactly ONE
+category word. Catching emergencies is the most important job — when unsure
+between safety and anything else, choose safety.
 
-  safety    — fall, chest pain, difficulty breathing, severe pain, or any
-              situation needing immediate emergency help.
-  reminder  — medication reminders, appointment questions, daily schedule.
-  behavior  — mood shifts, withdrawal, confusion, sleep or appetite changes.
-  caregiver — contacting family, sending a message to Maria, sharing an update.
-  health    — symptoms, vitals, medication questions, chronic conditions.
-  companion — everything else: conversation, memory, emotional support.
+  safety    — emergencies or physical danger: a fall, chest pain, trouble
+              breathing, severe pain, bleeding, fainting, a racing or irregular
+              heartbeat, "I'm dying", or feeling something is very wrong.
+  reminder  — medication timing, appointments, or the daily schedule.
+  caregiver — an explicit request to contact or message family or a caregiver.
+  health    — a specific non-emergency symptom or vital reading.
+  behavior  — noticing mood shifts, withdrawal, confusion, or sleep/appetite changes.
+  companion — the default home base: ordinary conversation, company, emotional
+              support, loneliness, mood, and short replies ("yes", "done").
 
-Reply with exactly one word from the list above.
+Rules:
+- Reply with exactly ONE word from the list. No punctuation, no explanation.
+- companion is home base: if the message is just conversation, feelings, or a
+  short reply, choose companion.
+- Emergencies ALWAYS win: any sign of physical danger goes to safety, not companion.
+
+Examples:
+  "I fell and I can't get up" -> safety
+  "My chest feels tight and I can't breathe" -> safety
+  "I think I'm dying" -> safety
+  "I feel dizzy and my heart is racing" -> safety
+  "Did I already take my morning pills?" -> reminder
+  "Can you let my sister know I'm okay?" -> caregiver
+  "Good morning, it's a lovely day" -> companion
+  "I've been feeling a bit lonely lately" -> companion
+  "Yes, that sounds good" -> companion
+
+Reply with exactly one word.
 """
 
 
@@ -122,18 +144,14 @@ class GuardianAgent:
         if any(kw in lowered for kw in _SAFETY_KEYWORDS):
             return "safety"
 
-        # Include the last 4 messages (2 turns) so the router can classify
-        # short replies like "yes" or "maybe" in context.
-        context = (history or [])[-4:]
-        prior_hint = (
-            f"\nThe previous turn was handled by the '{self._last_route}' agent. "
-            "If the patient's reply is a short follow-up (e.g. 'yes', 'no', 'maybe', 'sure'), "
-            "keep routing to the same agent unless the content clearly belongs elsewhere."
-        )
+        # Classify on the current message alone. Feeding prior turns + a
+        # "stick to the last agent" hint created a companion gravity well:
+        # once a turn landed on companion (the default), follow-ups stayed there
+        # and real intents got swallowed. companion is still the fallback below,
+        # so ordinary short replies route there naturally without the bias.
         response = self._llm.chat(
             [
-                Message(role="system", content=_ROUTER_PROMPT + prior_hint),
-                *context,
+                Message(role="system", content=_ROUTER_PROMPT),
                 Message(role="user", content=message),
             ],
             max_tokens=24,
@@ -142,8 +160,25 @@ class GuardianAgent:
         label = (response.text or "").strip().lower()
         for route in _ROUTES:
             if route in label:
+                logger.info(f"[router] {message!r} -> {route} (model said {label!r})")
                 return route
+        # No category matched the model's reply — fall back to companion. Logged
+        # at WARNING so an unexpected default is visible while debugging routing.
+        logger.warning(
+            f"[router] no category matched model reply {label!r} for {message!r}; "
+            "defaulting to companion"
+        )
         return "companion"
+
+    def reset(self) -> None:
+        """Wipe the conversation memory so a test or demo run starts clean.
+
+        Clears the in-process history shared across all specialists and the
+        last-route marker. The next turn behaves as if the backend just booted,
+        with no prior context — used by POST /turn/reset (e.g. on page refresh).
+        """
+        self._history.clear()
+        self._last_route = "companion"
 
     def chat(self, user_message: str) -> str:
         return self.turn(user_message)["reply"]
