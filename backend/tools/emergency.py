@@ -77,11 +77,24 @@ def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
 
     twilio = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
     twiml = f'<Response><Say voice="Polly.Joanna">{spoken_message}</Say></Response>'
-    call = twilio.calls.create(
-        to=emergency_number,
-        from_=os.getenv("TWILIO_FROM_NUMBER"),
-        twiml=twiml,
-    )
+    try:
+        call = twilio.calls.create(
+            to=emergency_number,
+            from_=os.getenv("TWILIO_FROM_NUMBER"),
+            twiml=twiml,
+        )
+    except Exception as exc:  # noqa: BLE001 - a telephony failure must not 500 the turn
+        event = {
+            "tool": "call_911",
+            "status": "error",
+            "service": "EMS",
+            "phone": emergency_number,
+            "reason": reason,
+            "location": location,
+            "error": str(exc),
+        }
+        CALL_LOG.append(event)
+        return event
 
     event = {
         "tool": "call_911",
@@ -173,7 +186,14 @@ def notify_caregiver(
                  "error": "no phone number on file"}
             )
             continue
-        call = twilio.calls.create(to=phone, from_=from_number, twiml=twiml)
+        try:
+            call = twilio.calls.create(to=phone, from_=from_number, twiml=twiml)
+        except Exception as exc:  # noqa: BLE001 - one bad number must not 500 the turn
+            calls.append(
+                {"contact": name, "relationship": rel, "phone": phone,
+                 "status": "error", "error": str(exc)}
+            )
+            continue
         calls.append(
             {"contact": name, "relationship": rel, "phone": phone,
              "status": "called", "call_sid": call.sid}

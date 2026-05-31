@@ -76,6 +76,23 @@ services:
       # 4 slashes = absolute path; this overrides the relative DATABASE_URL in .env,
       # which stays portable for host / non-Docker runs.
       DATABASE_URL: sqlite:////app/data/guardian.db
+      # Which demo persona is live. Read once at import by backend/persona.py and
+      # backend/agents/prompts/_base.py, so the prompt AND the tool/DB lookups
+      # follow the same person. Switch = change this + restart backend (--no-deps).
+      #   matthew -> Scenario 1 (night-fall demo, default)
+      #   sarah   -> Scenario 2 (proactive-companion demo)
+      GUARDIAN_PERSONA: ${GUARDIAN_PERSONA:-matthew}
+      # --- Local voice: in-process Kokoro (TTS) + faster-whisper (STT) --------
+      # The backend renders speech and transcribes audio itself, on the Grace CPU
+      # — no cloud, no OPENAI_API_KEY. See backend/voice/{tts,stt}.py. Model
+      # weights are read from the HF cache mounted below (pre-pulled on the host),
+      # so first use is instant and works fully offline.
+      TTS_BACKEND: kokoro                                   # Kokoro-82M, never OpenAI
+      WHISPER_MODEL: ${WHISPER_MODEL:-small.en}             # faster-whisper CT2 model
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}                # CTranslate2 has no sm_121 GPU path
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}   # int8 = fast + light on CPU
+      KOKORO_VOICE_DEFAULT: ${KOKORO_VOICE_DEFAULT:-af_heart}
+      HF_HOME: /root/.cache/huggingface                     # where the models live (mount below)
     # trtllm uses host networking, so reach it from this bridge container via
     # host.docker.internal (mapped to the docker bridge gateway). .env sets
     # LLM_BASE_URL=http://host.docker.internal:8000/v1 to match.
@@ -85,6 +102,10 @@ services:
       - "8080:8000"             # LAN: http://10.10.52.255:8080
     volumes:
       - guardian-data:/app/data
+      # Local voice model weights (Kokoro-82M + faster-whisper). Same host HF
+      # cache the trtllm service uses, so models are pulled once and shared, and
+      # they persist on the machine across container rebuilds/recreates.
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
     depends_on:
       - trtllm
     healthcheck:
@@ -132,12 +153,22 @@ services:
       retries: 5
 
   # ===========================================================================
-  # VOICE (add later) — each model is its OWN service on its OWN port, talking
-  # OpenAI-style to the backend. When you enable these, LOWER the trtllm KV-cache
-  # slice (kv_cache_config.free_gpu_memory_fraction in nano_v3_gb10.yaml, now
-  # 0.88) so STT/TTS get a share of the 128 GB unified pool. Verify with nvidia-smi.
-  #   stt:  Parakeet (NeMo/Riva) or faster-whisper, e.g. :9000
-  #   tts:  Kokoro (FastAPI-wrapped), e.g. :8880
+  # VOICE — now runs IN-PROCESS inside the `backend` service, not as separate
+  # containers. Kokoro-82M (TTS) and faster-whisper (STT) are installed into the
+  # backend image (see backend/Dockerfile) and load on the Grace CPU on first use,
+  # reading their weights from the mounted HF cache. Selected by the TTS_BACKEND /
+  # WHISPER_* env vars on the backend service above — no cloud, no API key.
+  #
+  # Why in-process and CPU (not GPU service containers): the DGX Spark is aarch64
+  # with a Blackwell GB10 (sm_121). The usual prebuilt voice images
+  # (remsky/kokoro-fastapi, fedirz/faster-whisper-server) are amd64 / older-CUDA
+  # and won't run here, and CTranslate2 has no sm_121 GPU path yet. Kokoro-82M and
+  # small.en Whisper are light enough to run real-time on the Grace cores.
+  #
+  # To promote either to its own GPU microservice later, build an aarch64 image
+  # FROM the trtllm CUDA base, expose an OpenAI-style endpoint (tts :8880 /
+  # stt :9000), lower the trtllm KV-cache slice (free_gpu_memory_fraction in
+  # nano_v3_gb10.yaml) to free VRAM, and point backend/voice/{tts,stt}.py at it.
   # ===========================================================================
 
 volumes:

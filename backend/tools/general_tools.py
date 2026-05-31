@@ -97,11 +97,24 @@ def call_person(
 
     twilio = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
     twiml = f'<Response><Say voice="Polly.Joanna">{message}</Say></Response>'
-    call = twilio.calls.create(
-        to=to_number,
-        from_=os.getenv("TWILIO_FROM_NUMBER"),
-        twiml=twiml,
-    )
+    try:
+        call = twilio.calls.create(
+            to=to_number,
+            from_=os.getenv("TWILIO_FROM_NUMBER"),
+            twiml=twiml,
+        )
+    except Exception as exc:  # noqa: BLE001 - a telephony failure must not 500 the turn
+        event = {
+            "tool": "call_person",
+            "status": "error",
+            "channel": "voice",
+            "person": matched_name,
+            "phone": to_number,
+            "message": message,
+            "error": str(exc),
+        }
+        CALL_LOG.append(event)
+        return event
 
     event = {
         "tool": "call_person",

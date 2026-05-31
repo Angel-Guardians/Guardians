@@ -14,9 +14,10 @@ from typing import Any
 from loguru import logger
 from sqlmodel import Session, select
 
-from backend.db.models import Medication, Patient, ReminderIntake
+from backend.db.models import Medication, ReminderIntake
 from backend.db.session import engine
 from backend.llm.base import ToolSpec
+from backend.persona import active_patient_id
 
 CALL_LOG: list[dict[str, Any]] = []
 
@@ -28,7 +29,8 @@ _FALLBACK_SCHEDULE = [
 
 
 def _default_patient_id(session: Session) -> int | None:
-    return session.exec(select(Patient.id).order_by(Patient.id)).first()
+    """The patient backing the active persona (GUARDIAN_PERSONA), or the first on file."""
+    return active_patient_id(session)
 
 
 def _cron_field(field: str, default: int) -> list[int]:

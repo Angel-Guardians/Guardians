@@ -13,6 +13,78 @@ from backend.db.models import Patient
 from backend.db.session import engine, init_db
 from backend.services.patient_profile import get_patient_profile, update_patient_profile
 
+MATTHEW_PROFILE = PatientProfileWrite(
+    name="Matthew",
+    age=78,
+    conditions=[
+        "atrial fibrillation",
+        "prior heart attack with stents",
+        "mild heart failure",
+        "lives alone",
+    ],
+    allergies=[],
+    primary_language="en",
+    location="200 Wellesley Street East, Apt 1407, Toronto, ON M4X 1G7",
+    bio=(
+        "Retired civil engineer who still tinkers with model trains and reads military "
+        "history. Widower; his late wife Joan passed three years ago. Enjoys jazz records, "
+        "morning walks when his energy allows, and weekly video calls with his grandchildren."
+    ),
+    notes=(
+        "On a blood thinner (apixaban) — falls and head injuries carry a high bleeding risk, "
+        "so any fall is treated seriously. Prefers calm, plain-spoken reassurance. "
+        "Sophie, a nurse in the same building (CPR/AED-trained), is the first to call; "
+        "his daughter Claire in Ottawa is notified after Sophie."
+    ),
+    emergency_contacts=[
+        # Primary support is Sophie — must match the Matthew persona block in
+        # backend/agents/prompts/_base.py so notify_caregiver(["Sophie"]) resolves.
+        EmergencyContactWrite(
+            name="Sophie",
+            relationship="neighbor_nurse",
+            phone="+1 (416) 555-0188",
+            priority=1,
+        ),
+        EmergencyContactWrite(
+            name="Claire",
+            relationship="daughter",
+            phone="+1 (613) 555-0173",
+            priority=2,
+        ),
+    ],
+    medications=[
+        ProfileMedicationWrite(
+            name="Apixaban",
+            dose="2.5 mg",
+            schedule_cron="0 8,20 * * *",
+            with_food=False,
+            notes="Blood thinner — twice daily, morning and evening",
+        ),
+        ProfileMedicationWrite(
+            name="Metoprolol",
+            dose="50 mg",
+            schedule_cron="0 8,20 * * *",
+            with_food=True,
+            notes="Beta blocker — rate control, twice daily with meals",
+        ),
+        ProfileMedicationWrite(
+            name="Atorvastatin",
+            dose="40 mg",
+            schedule_cron="0 20 * * *",
+            with_food=False,
+            notes="Statin — evening",
+        ),
+        ProfileMedicationWrite(
+            name="Furosemide",
+            dose="20 mg",
+            schedule_cron="0 8 * * *",
+            with_food=False,
+            notes="Diuretic for heart failure — morning",
+        ),
+    ],
+)
+
+
 ELEANOR_PROFILE = PatientProfileWrite(
     name="Eleanor",
     age=70,
@@ -77,16 +149,18 @@ SARAH_PROFILE = PatientProfileWrite(
         "Avoid being overly cautious about her physical capability — she manages her own mobility."
     ),
     emergency_contacts=[
+        # Primary support is her sister Amara — must match the Sarah persona block
+        # in backend/agents/prompts/_base.py so notify_caregiver(["Amara"]) resolves.
+        EmergencyContactWrite(
+            name="Amara",
+            relationship="sister",
+            phone="+1 (555) 555-0203",
+            priority=1,
+        ),
         EmergencyContactWrite(
             name="Dr. Patel",
             relationship="psychologist",
             phone="+1 (555) 555-0201",
-            priority=1,
-        ),
-        EmergencyContactWrite(
-            name="James",
-            relationship="brother",
-            phone="+1 (555) 555-0202",
             priority=2,
         ),
     ],
@@ -100,6 +174,32 @@ SARAH_PROFILE = PatientProfileWrite(
         ),
     ],
 )
+
+
+def upsert_matthew(session: Session) -> None:
+    existing = session.exec(select(Patient).where(Patient.name == "Matthew")).first()
+    if existing is None or existing.id is None:
+        patient = Patient(
+            name=MATTHEW_PROFILE.name,
+            age=MATTHEW_PROFILE.age,
+            conditions=MATTHEW_PROFILE.conditions,
+            allergies=MATTHEW_PROFILE.allergies,
+            primary_language=MATTHEW_PROFILE.primary_language,
+            location=MATTHEW_PROFILE.location,
+            bio=MATTHEW_PROFILE.bio,
+            notes=MATTHEW_PROFILE.notes,
+        )
+        session.add(patient)
+        session.commit()
+        session.refresh(patient)
+        patient_id = patient.id
+        assert patient_id is not None
+    else:
+        patient_id = existing.id
+
+    update_patient_profile(session, patient_id, MATTHEW_PROFILE)
+    profile = get_patient_profile(session, patient_id)
+    logger.info("Seeded patient #{}: {} ({})", profile.id, profile.name, profile.age)
 
 
 def upsert_eleanor(session: Session) -> None:
@@ -158,6 +258,7 @@ def seed_if_empty() -> None:
     """Create demo patients when the database has no rows yet."""
     with Session(engine) as session:
         if session.exec(select(Patient)).first() is None:
+            upsert_matthew(session)
             upsert_eleanor(session)
             upsert_sarah(session)
 
@@ -166,5 +267,6 @@ def seed_all() -> None:
     """Idempotent seed for CLI (`guardian-seed`)."""
     init_db()
     with Session(engine) as session:
+        upsert_matthew(session)
         upsert_eleanor(session)
         upsert_sarah(session)

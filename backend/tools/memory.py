@@ -44,8 +44,16 @@ def _keyword_recall(query: str, persona_id: str, k: int) -> list[str]:
     return [p for _, p in scored[:k]] or paras[:k]
 
 
-def recall_history(query: str, persona_id: str = "eleanor", k: int = 3) -> dict[str, Any]:
-    """Retrieve up to `k` relevant snippets from the patient's life-history note."""
+def recall_history(query: str, persona_id: str | None = None, k: int = 3) -> dict[str, Any]:
+    """Retrieve up to `k` relevant snippets from the patient's life-history note.
+
+    When the model doesn't name a persona, default to the active one
+    (GUARDIAN_PERSONA) so recall targets the same person the prompt describes.
+    """
+    if persona_id is None:
+        from backend.persona import ACTIVE_PERSONA
+
+        persona_id = ACTIVE_PERSONA
     backend = os.getenv("MEMORY_BACKEND", "keyword").strip().lower()
     if backend == "pgvector":
         try:

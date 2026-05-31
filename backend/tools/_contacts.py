@@ -9,12 +9,18 @@ from __future__ import annotations
 
 from sqlmodel import Session, select
 
-from backend.db.models import EmergencyContact, Patient
+from backend.db.models import EmergencyContact
+from backend.persona import active_patient_id
 
 
 def default_patient_id(session: Session) -> int | None:
-    """The single-home patient: the first patient on file, or None if unseeded."""
-    return session.exec(select(Patient.id).order_by(Patient.id)).first()
+    """The patient backing the active persona (GUARDIAN_PERSONA), or the first on file.
+
+    Delegates to ``backend.persona`` so contact resolution always targets the same
+    person the prompt persona describes — the model asks for "Sophie", and this
+    looks her up under Matthew's record, not whoever happens to be patient #1.
+    """
+    return active_patient_id(session)
 
 
 def _all_contacts(session: Session, patient_id: int) -> list[EmergencyContact]:

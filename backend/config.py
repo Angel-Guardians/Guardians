@@ -83,8 +83,28 @@ class Settings(BaseSettings):
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
     log_level: str = "INFO"
-    # Frontend dev origins allowed by CORS
-    cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Frontend origins allowed by CORS. The browser sends the *page* origin
+    # (the frontend on :3000) when it calls the backend cross-origin (:8080).
+    cors_allow_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://10.10.52.255:3000",
+        # Tailscale: this node's stable tailnet IP + MagicDNS name (frontend on :3000).
+        "http://100.103.166.16:3000",
+        "http://gx10-3d68.tailb0d74f.ts.net:3000",
+    ]
+    # Also admit any private-LAN or Tailscale host on :3000 so other machines reach
+    # the backend without re-listing their IPs. allow_credentials forbids a "*"
+    # origin, so we match the RFC1918 + Tailscale CGNAT ranges (and MagicDNS) here.
+    cors_allow_origin_regex: str = (
+        r"http://(localhost|127\.0\.0\.1"
+        r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+        r"|192\.168\.\d{1,3}\.\d{1,3}"
+        r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+        r"|100\.\d{1,3}\.\d{1,3}\.\d{1,3}"  # Tailscale CGNAT (100.64.0.0/10)
+        r"|[a-z0-9-]+\.[a-z0-9-]+\.ts\.net"  # Tailscale MagicDNS
+        r"):3000"
+    )
 
     # CPU pinning
     always_on_cpu_cores: str = "0-5"

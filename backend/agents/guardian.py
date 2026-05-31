@@ -100,21 +100,16 @@ class GuardianAgent:
         self._load_patient_context(patient_id)
 
     def _load_patient_context(self, patient_id: int) -> None:
-        from backend.agents.prompts._base import build_patient_context
-        from backend.db.session import engine
-        from backend.services.patient_profile import PatientNotFoundError, get_patient_profile
-        from sqlmodel import Session
+        """No-op: persona/patient context is static and lives in the prompts.
 
-        try:
-            with Session(engine) as session:
-                profile = get_patient_profile(session, patient_id)
-            context = build_patient_context(profile)
-        except PatientNotFoundError:
-            logger.warning(f"Patient #{patient_id} not found; running without patient context.")
-            context = ""
-
-        for agent in self._agents.values():
-            agent.patient_context = context
+        Under the persona design (see prompts/_base.py), the patient block is a
+        fixed string selected by the GUARDIAN_PERSONA env var at process start and
+        is already composed into every specialist's system prompt via
+        with_context(). There is nothing to load from the DB or inject at runtime,
+        so each agent keeps the persona baked into its prompt. Switching personas
+        is an env change + restart, not a per-request DB lookup.
+        """
+        return
 
     @trace(name="guardian-router")
     def route(self, message: str, history: list[Message] | None = None) -> str:
