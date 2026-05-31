@@ -92,7 +92,7 @@ class GuardianAgent:
                 Message(role="system", content=_ROUTER_PROMPT),
                 Message(role="user", content=message),
             ],
-            max_tokens=8,
+            max_tokens=24,
             temperature=0.0,
         )
         label = (response.text or "").strip().lower()
