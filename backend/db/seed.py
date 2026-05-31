@@ -19,6 +19,12 @@ ELEANOR_PROFILE = PatientProfileWrite(
     conditions=["cardiac history", "lives alone"],
     allergies=["penicillin"],
     primary_language="en",
+    location="42 Maple Street, Toronto, ON",
+    bio=(
+        "Retired schoolteacher who loves gardening, crossword puzzles, and classic films. "
+        "Enjoys quiet mornings with tea and the newspaper. Has a tabby cat named Biscuit. "
+        "Volunteers at the local library on Thursdays when her health allows."
+    ),
     notes="Post-hip-fracture recovery. Prefers calm reassurance during emergencies.",
     emergency_contacts=[
         EmergencyContactWrite(
@@ -53,6 +59,49 @@ ELEANOR_PROFILE = PatientProfileWrite(
 )
 
 
+SARAH_PROFILE = PatientProfileWrite(
+    name="Sarah",
+    age=35,
+    conditions=["physical disability", "wheelchair user", "mild depression"],
+    allergies=[],
+    primary_language="en",
+    location="18 Birchwood Avenue, Vancouver, BC",
+    bio=(
+        "Graphic designer who works from home. Passionate about digital art, accessible travel, "
+        "and adaptive sports — particularly wheelchair basketball and hand cycling. "
+        "Enjoys cooking, podcasts, and weekend visits to local art galleries with friends."
+    ),
+    notes=(
+        "Full-time wheelchair user. Has mild depression and attends regular psychologist sessions. "
+        "Prefers to be spoken to as an independent adult. "
+        "Avoid being overly cautious about her physical capability — she manages her own mobility."
+    ),
+    emergency_contacts=[
+        EmergencyContactWrite(
+            name="Dr. Patel",
+            relationship="psychologist",
+            phone="+1 (555) 555-0201",
+            priority=1,
+        ),
+        EmergencyContactWrite(
+            name="James",
+            relationship="brother",
+            phone="+1 (555) 555-0202",
+            priority=2,
+        ),
+    ],
+    medications=[
+        ProfileMedicationWrite(
+            name="Sertraline",
+            dose="50 mg",
+            schedule_cron="0 9 * * *",
+            with_food=True,
+            notes="Antidepressant — take with breakfast",
+        ),
+    ],
+)
+
+
 def upsert_eleanor(session: Session) -> None:
     existing = session.exec(select(Patient).where(Patient.name == "Eleanor")).first()
     if existing is None or existing.id is None:
@@ -62,6 +111,8 @@ def upsert_eleanor(session: Session) -> None:
             conditions=ELEANOR_PROFILE.conditions,
             allergies=ELEANOR_PROFILE.allergies,
             primary_language=ELEANOR_PROFILE.primary_language,
+            location=ELEANOR_PROFILE.location,
+            bio=ELEANOR_PROFILE.bio,
             notes=ELEANOR_PROFILE.notes,
         )
         session.add(patient)
@@ -77,11 +128,38 @@ def upsert_eleanor(session: Session) -> None:
     logger.info("Seeded patient #{}: {} ({})", profile.id, profile.name, profile.age)
 
 
+def upsert_sarah(session: Session) -> None:
+    existing = session.exec(select(Patient).where(Patient.name == "Sarah")).first()
+    if existing is None or existing.id is None:
+        patient = Patient(
+            name=SARAH_PROFILE.name,
+            age=SARAH_PROFILE.age,
+            conditions=SARAH_PROFILE.conditions,
+            allergies=SARAH_PROFILE.allergies,
+            primary_language=SARAH_PROFILE.primary_language,
+            location=SARAH_PROFILE.location,
+            bio=SARAH_PROFILE.bio,
+            notes=SARAH_PROFILE.notes,
+        )
+        session.add(patient)
+        session.commit()
+        session.refresh(patient)
+        patient_id = patient.id
+        assert patient_id is not None
+    else:
+        patient_id = existing.id
+
+    update_patient_profile(session, patient_id, SARAH_PROFILE)
+    profile = get_patient_profile(session, patient_id)
+    logger.info("Seeded patient #{}: {} ({})", profile.id, profile.name, profile.age)
+
+
 def seed_if_empty() -> None:
     """Create demo patients when the database has no rows yet."""
     with Session(engine) as session:
         if session.exec(select(Patient)).first() is None:
             upsert_eleanor(session)
+            upsert_sarah(session)
 
 
 def seed_all() -> None:
@@ -89,3 +167,4 @@ def seed_all() -> None:
     init_db()
     with Session(engine) as session:
         upsert_eleanor(session)
+        upsert_sarah(session)

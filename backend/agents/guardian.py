@@ -65,6 +65,7 @@ class GuardianAgent:
         self,
         llm: LLMClient | None = None,
         registry: ToolRegistry | None = None,
+        patient_id: int = 1,
     ) -> None:
         # Single integration point: build the client once and inject it everywhere.
         self._llm = llm or build_llm()
@@ -79,8 +80,26 @@ class GuardianAgent:
             "caregiver": CaregiverLiaisonAgent(self._llm, self._registry),
             "health": HealthAgent(self._llm, self._registry),
         }
+        self._load_patient_context(patient_id)
         # Compile the LangGraph orchestrator once.
         self._graph = build_guardian_graph(self.route, self._agents)
+
+    def _load_patient_context(self, patient_id: int) -> None:
+        from backend.agents.prompts._base import build_patient_context
+        from backend.db.session import engine
+        from backend.services.patient_profile import PatientNotFoundError, get_patient_profile
+        from sqlmodel import Session
+
+        try:
+            with Session(engine) as session:
+                profile = get_patient_profile(session, patient_id)
+            context = build_patient_context(profile)
+        except PatientNotFoundError:
+            logger.warning(f"Patient #{patient_id} not found; running without patient context.")
+            context = ""
+
+        for agent in self._agents.values():
+            agent.patient_context = context
 
     @trace(name="guardian-router")
     def route(self, message: str, history: list[Message] | None = None) -> str:

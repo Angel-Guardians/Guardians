@@ -31,13 +31,17 @@ class ToolCallingAgent:
     def __init__(self, llm: LLMClient, registry: ToolRegistry) -> None:
         self._llm = llm
         self._registry = registry
+        self.patient_context: str = ""
 
     def chat(self, user_message: str, history: list[Message], emit=None) -> str:
         """Run the tool loop. `emit(kind, payload)` is an optional progress hook
         (kind == "tool_invocation") so the live dashboard can light up each tool
         the instant it fires; safe to omit for headless runs (phase0, tests)."""
+        system = self.system_prompt
+        if self.patient_context:
+            system = f"{system}\n\n{self.patient_context}"
         messages: list[Message] = [
-            Message(role="system", content=self.system_prompt),
+            Message(role="system", content=system),
             *history,
             Message(role="user", content=user_message),
         ]
