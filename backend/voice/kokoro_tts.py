@@ -47,10 +47,32 @@ def kokoro_voice_for_route(route: str | None) -> str:
     return _KOKORO_VOICE_BY_ROUTE.get(route or "", settings.kokoro_voice_default)
 
 
+def _configure_espeak() -> None:
+    """Point phonemizer at the bundled espeak-ng library.
+
+    Misaki (Kokoro's English G2P) falls back to espeak for out-of-dictionary
+    tokens — numbers, times, units like '8:00 AM' or '72 bpm'. Without a reachable
+    espeak-ng library the fallback yields None and misaki crashes with
+    "unsupported operand type(s) for +: 'NoneType' and 'str'". The `espeakng-loader`
+    package ships the library; wiring it in before the pipeline is built makes the
+    fallback work. Best-effort: on hosts with a system espeak-ng this is a no-op.
+    """
+    try:
+        import espeakng_loader
+        from phonemizer.backend.espeak.wrapper import EspeakWrapper
+
+        EspeakWrapper.set_library(espeakng_loader.get_library_path())
+        if hasattr(EspeakWrapper, "set_data_path"):
+            EspeakWrapper.set_data_path(espeakng_loader.get_data_path())
+    except Exception as exc:  # noqa: BLE001 - missing espeak only hurts OOV tokens
+        logger.warning(f"[kokoro] could not configure espeak fallback: {exc}")
+
+
 def _get_pipeline():
     """Build (once) and return the Kokoro pipeline. Raises if kokoro isn't usable."""
     global _pipeline
     if _pipeline is None:
+        _configure_espeak()
         from kokoro import KPipeline  # optional dep; ImportError → caller falls back
 
         logger.info(f"[kokoro] loading pipeline (lang_code={settings.kokoro_lang_code})")
