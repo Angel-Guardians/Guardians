@@ -13,6 +13,14 @@ from backend.db.models import Patient
 from backend.db.session import engine, init_db
 from backend.services.patient_profile import get_patient_profile, update_patient_profile
 
+# Demo phone numbers. Twilio trial accounts may only dial *verified* numbers, so
+# every contact below uses one of the two numbers verified for this demo. Swap
+# these two constants to re-point the whole demo at different phones.
+#   FRIEND_PHONE  -> the friend's handset (priority-1 caregiver in both scenarios)
+#   OWNER_PHONE   -> the demo owner's handset (also TWILIO_911_NUMBER in .env)
+FRIEND_PHONE = "+14375533369"
+OWNER_PHONE = "+14168379751"
+
 ELEANOR_PROFILE = PatientProfileWrite(
     name="Eleanor",
     age=70,
@@ -28,15 +36,15 @@ ELEANOR_PROFILE = PatientProfileWrite(
     notes="Post-hip-fracture recovery. Prefers calm reassurance during emergencies.",
     emergency_contacts=[
         EmergencyContactWrite(
-            name="Maria",
-            relationship="daughter",
-            phone="+1 (555) 555-0111",
+            name="Sophie",
+            relationship="caregiver",
+            phone=FRIEND_PHONE,
             priority=1,
         ),
         EmergencyContactWrite(
-            name="Dr. Adeyemi",
-            relationship="family_doctor",
-            phone="+1 (555) 555-0122",
+            name="David",
+            relationship="son",
+            phone=OWNER_PHONE,
             priority=2,
         ),
     ],
@@ -78,15 +86,15 @@ SARAH_PROFILE = PatientProfileWrite(
     ),
     emergency_contacts=[
         EmergencyContactWrite(
-            name="Dr. Patel",
-            relationship="psychologist",
-            phone="+1 (555) 555-0201",
+            name="Liam",
+            relationship="brother",
+            phone=FRIEND_PHONE,
             priority=1,
         ),
         EmergencyContactWrite(
-            name="James",
-            relationship="brother",
-            phone="+1 (555) 555-0202",
+            name="Maya",
+            relationship="close friend",
+            phone=OWNER_PHONE,
             priority=2,
         ),
     ],

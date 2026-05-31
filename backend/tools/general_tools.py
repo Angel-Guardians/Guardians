@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from loguru import logger
+
 from backend.llm.base import ToolSpec
 from backend.tools.decorators import audit_log, consent_check, idempotent
 from dotenv import load_dotenv
@@ -97,11 +99,26 @@ def call_person(
 
     twilio = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
     twiml = f'<Response><Say voice="Polly.Joanna">{message}</Say></Response>'
-    call = twilio.calls.create(
-        to=to_number,
-        from_=os.getenv("TWILIO_FROM_NUMBER"),
-        twiml=twiml,
-    )
+    # Don't let a Twilio failure (e.g. an unverified trial number) raise out of the
+    # tool and abort the turn — record it as a tool result and return.
+    try:
+        call = twilio.calls.create(
+            to=to_number,
+            from_=os.getenv("TWILIO_FROM_NUMBER"),
+            twiml=twiml,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"call_person: call to {matched_name} ({to_number}) failed: {exc}")
+        event = {
+            "tool": "call_person",
+            "status": "error",
+            "person": matched_name,
+            "phone": to_number,
+            "message": message,
+            "error": str(exc),
+        }
+        CALL_LOG.append(event)
+        return event
 
     event = {
         "tool": "call_person",

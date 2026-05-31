@@ -11,6 +11,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from loguru import logger
+
 from backend.llm.base import ToolSpec
 from backend.tools.decorators import audit_log, consent_check, idempotent
 from dotenv import load_dotenv
@@ -77,11 +79,28 @@ def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
 
     twilio = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
     twiml = f'<Response><Say voice="Polly.Joanna">{spoken_message}</Say></Response>'
-    call = twilio.calls.create(
-        to=emergency_number,
-        from_=os.getenv("TWILIO_FROM_NUMBER"),
-        twiml=twiml,
-    )
+    # A Twilio failure (e.g. an unverified trial number) must NOT abort the turn —
+    # the safety agent still needs to reassure the patient and notify the caregiver.
+    # Record the failure as a tool result and return instead of raising.
+    try:
+        call = twilio.calls.create(
+            to=emergency_number,
+            from_=os.getenv("TWILIO_FROM_NUMBER"),
+            twiml=twiml,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"call_911: Twilio call to {emergency_number} failed: {exc}")
+        event = {
+            "tool": "call_911",
+            "status": "error",
+            "service": "EMS",
+            "phone": emergency_number,
+            "reason": reason,
+            "location": location,
+            "error": str(exc),
+        }
+        CALL_LOG.append(event)
+        return event
 
     event = {
         "tool": "call_911",
@@ -165,6 +184,10 @@ def notify_caregiver(
     twiml = f'<Response><Say voice="Polly.Joanna">{message}</Say></Response>'
     from_number = os.getenv("TWILIO_FROM_NUMBER")
 
+    # Dial every resolved contact. Each call is independent: one failed number
+    # (e.g. an unverified Twilio trial number) is recorded as an error but never
+    # aborts the loop, so the remaining caregivers are still reached and the turn
+    # completes. This is what makes the multi-contact / parallel-notify demo robust.
     calls: list[dict[str, Any]] = []
     for name, rel, phone in resolved:
         if not phone:
@@ -173,15 +196,23 @@ def notify_caregiver(
                  "error": "no phone number on file"}
             )
             continue
-        call = twilio.calls.create(to=phone, from_=from_number, twiml=twiml)
-        calls.append(
-            {"contact": name, "relationship": rel, "phone": phone,
-             "status": "called", "call_sid": call.sid}
-        )
+        try:
+            call = twilio.calls.create(to=phone, from_=from_number, twiml=twiml)
+            calls.append(
+                {"contact": name, "relationship": rel, "phone": phone,
+                 "status": "called", "call_sid": call.sid}
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"notify_caregiver: call to {name} ({phone}) failed: {exc}")
+            calls.append(
+                {"contact": name, "relationship": rel, "phone": phone,
+                 "status": "error", "error": str(exc)}
+            )
 
+    any_called = any(c["status"] == "called" for c in calls)
     event = {
         "tool": "notify_caregiver",
-        "status": "called",
+        "status": "called" if any_called else "error",
         "channel": "voice",
         "message": message,
         "calls": calls,
