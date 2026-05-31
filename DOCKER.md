@@ -67,8 +67,15 @@ NEXT_PUBLIC_API_BASE_URL=https://api.example.com docker compose build frontend
 ```
 
 ### Persistence
-The `guardian-data` volume holds the SQLite DB (`/app/data`) so patient data and
-seeds survive `docker compose down`. Use `down -v` to wipe it.
+The `guardian-data` volume is mounted at `/app/data`, and the `backend` service
+pins the SQLite DB into it via `DATABASE_URL: sqlite:////app/data/guardian.db`
+(set in the compose `environment:` block, which overrides the relative
+`DATABASE_URL` in `.env`). So patient data and seeds survive `docker compose down`.
+Use `down -v` to wipe the volume.
+
+> The four slashes matter: `sqlite:////app/...` is an **absolute** path. The `.env`
+> default `sqlite:///./guardian.db` is **relative** to the container workdir
+> (`/app`), which lands *outside* the volume — fine for host runs, lost on recreate.
 
 ## Running scripts, tests, and scenarios
 
