@@ -107,6 +107,11 @@ export const api = {
       { method: "POST", body: JSON.stringify({ text, patient_id: patientId }) },
     ),
 
+  // Wipe the agent's running conversation history so the next answers start
+  // fresh (the patient profile/persona stays loaded).
+  clearContext: () =>
+    sendJson<{ cleared: boolean }>("/turn/clear", { method: "POST" }),
+
   // Implemented: GET /vitals?kind=&since= (served from the Vital table; watch feeds it).
   getVitals: (kind: VitalKind, since = "24h") =>
     getJson<VitalSeries>(`/vitals?kind=${kind}&since=${since}`),

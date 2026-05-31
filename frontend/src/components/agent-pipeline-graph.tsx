@@ -23,17 +23,17 @@ import { stepLabel } from "@/lib/pipeline-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const CANVAS_H = 720;
-const AGENT_ROW_GAP = 88;
-const TOOL_NODE_H = 44;
+const CANVAS_H = 380;
+const AGENT_ROW_GAP = 54;
+const TOOL_NODE_H = 32;
 /** Center-to-center spacing — must exceed node height to avoid overlap. */
-const TOOL_STACK_GAP = TOOL_NODE_H + 20;
+const TOOL_STACK_GAP = TOOL_NODE_H + 12;
 
 const STAGE_X = {
-  input: 130,
-  router: 360,
-  agents: 580,
-  tools: 800,
+  input: 96,
+  router: 268,
+  agents: 430,
+  tools: 600,
 } as const;
 
 const STAGE_LABELS = [
@@ -69,15 +69,15 @@ function buildLayouts(activeRoute: AgentRoute | null): Record<NodeId, NodeLayout
   const layouts = {} as Record<NodeId, NodeLayout>;
   const midY = CANVAS_H / 2;
 
-  layouts.input = { cx: STAGE_X.input, cy: midY, w: 156, h: 52 };
-  layouts.router = { cx: STAGE_X.router, cy: midY, w: 176, h: 56 };
+  layouts.input = { cx: STAGE_X.input, cy: midY, w: 118, h: 40 };
+  layouts.router = { cx: STAGE_X.router, cy: midY, w: 132, h: 42 };
 
   AGENT_ROUTES.forEach((route, i) => {
     layouts[route] = {
       cx: STAGE_X.agents,
       cy: agentRowY(i),
-      w: 124,
-      h: 50,
+      w: 104,
+      h: 36,
     };
   });
 
@@ -88,7 +88,7 @@ function buildLayouts(activeRoute: AgentRoute | null): Record<NodeId, NodeLayout
       layouts[toolId] = {
         cx: STAGE_X.tools,
         cy: agentCy + (i - (tools.length - 1) / 2) * TOOL_STACK_GAP,
-        w: 148,
+        w: 124,
         h: TOOL_NODE_H,
       };
     });
@@ -106,7 +106,7 @@ function canvasWidth(layouts: Record<NodeId, NodeLayout>): number {
   for (const layout of Object.values(layouts)) {
     maxRight = Math.max(maxRight, layout.cx + layout.w / 2 + 48);
   }
-  return Math.max(1180, maxRight);
+  return Math.max(880, maxRight);
 }
 
 function getLayout(
@@ -116,7 +116,7 @@ function getLayout(
   return layouts[id] ?? { cx: 0, cy: 0, w: 80, h: 36 };
 }
 
-const ARROW_SIZE = 9;
+const ARROW_SIZE = 7;
 
 /** Line stops before the arrowhead; tip sits on the target node's left edge. */
 function edgeGeometry(
@@ -134,7 +134,7 @@ function edgeGeometry(
   if (Math.abs(y2 - y1) < 6) {
     linePath = `M ${x1} ${y1} L ${xLineEnd} ${y2}`;
   } else {
-    const bend = Math.min(56, Math.abs(dx) * 0.4);
+    const bend = Math.min(40, Math.abs(dx) * 0.4);
     const c1x = x1 + bend;
     const c2x = xLineEnd - bend;
     linePath = `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${xLineEnd} ${y2}`;
@@ -229,13 +229,13 @@ export function AgentPipelineGraph({
   const pathColor = emphasizedAgent ? routeColor(emphasizedAgent) : undefined;
 
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Workflow className="size-4 text-muted-foreground" />
+    <div className="overflow-hidden rounded-[14px] border bg-card shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex items-center gap-1.5 text-xs font-semibold">
+          <Workflow className="size-3.5 text-muted-foreground" />
           Pipeline flow
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
           {pathColor ? (
             <span className="flex items-center gap-1.5">
               <span
@@ -252,13 +252,10 @@ export function AgentPipelineGraph({
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto overflow-y-hidden p-4 sm:p-6">
+      <div className="w-full overflow-x-auto overflow-y-hidden p-2 sm:p-3">
         <svg
           viewBox={`0 0 ${canvasW} ${CANVAS_H}`}
-          width={canvasW}
-          height={CANVAS_H}
-          className="mx-auto block min-h-[400px]"
-          style={{ minWidth: canvasW }}
+          className="mx-auto block h-auto w-full max-h-[360px] min-w-[640px]"
           role="img"
           aria-label="Guardian agent pipeline graph"
           preserveAspectRatio="xMidYMid meet"
@@ -270,8 +267,8 @@ export function AgentPipelineGraph({
             </linearGradient>
             <pattern
               id="dot-grid"
-              width="20"
-              height="20"
+              width="16"
+              height="16"
               patternUnits="userSpaceOnUse"
             >
               <circle
@@ -290,9 +287,9 @@ export function AgentPipelineGraph({
             <text
               key={label}
               x={x}
-              y={28}
+              y={20}
               textAnchor="middle"
-              className="fill-muted-foreground font-sans text-[11px] font-semibold uppercase tracking-widest"
+              className="fill-muted-foreground font-sans text-[9px] font-semibold uppercase tracking-widest"
             >
               {label}
             </text>
@@ -361,7 +358,7 @@ export function AgentPipelineGraph({
                   y={y}
                   width={layout.w}
                   height={layout.h}
-                  rx={10}
+                  rx={8}
                   fill="var(--card)"
                   stroke={stroke}
                   strokeWidth={strokeWidth}
@@ -383,7 +380,7 @@ export function AgentPipelineGraph({
                     isTool && "font-mono",
                   )}
                   fontSize={
-                    node.kind === "router" ? 14 : isAgent ? 12.5 : 11
+                    node.kind === "router" ? 11.5 : isAgent ? 10.5 : 9.5
                   }
                 >
                   {node.label}
@@ -440,7 +437,7 @@ export function AgentPipelineGraph({
       </div>
 
       {pipeline.transcript ? (
-        <div className="border-t border-border/50 bg-muted/15 px-4 py-2.5 text-center text-sm">
+        <div className="border-t border-border/50 bg-muted/15 px-3 py-2 text-center text-xs">
           <span className="font-medium text-foreground">Patient: </span>
           <span className="text-muted-foreground">
             &ldquo;{pipeline.transcript}&rdquo;
@@ -449,9 +446,9 @@ export function AgentPipelineGraph({
       ) : null}
 
       {onRunDemo ? (
-        <div className="border-t bg-muted/10 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium">Try a demo flow</p>
+        <div className="border-t bg-muted/10 px-3 py-2.5">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium">Try a demo flow</p>
             {pipeline.totalSteps > 0 ? (
               <div className="flex min-w-[140px] flex-1 max-w-xs items-center gap-2 sm:max-w-sm">
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">

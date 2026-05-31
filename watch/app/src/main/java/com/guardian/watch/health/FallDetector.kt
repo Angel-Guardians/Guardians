@@ -105,17 +105,15 @@ class FallDetector(
         private val SAMPLING_US = SensorManager.SENSOR_DELAY_GAME // ~50 Hz
 
         // --- tunables, in g ---
-        // Tuned MORE sensitive: an easier free-fall entry, a lower impact spike,
-        // and a wider "still" band so a real fall is caught more readily.
-        private const val FREE_FALL_G = 0.72f   // magnitude dips below this while falling
-        private const val IMPACT_G = 1.7f       // landing spike
-        private const val MOVING_LOW_G = 0.4f   // "still" band, lower bound
-        private const val MOVING_HIGH_G = 1.9f  // "still" band, upper bound
+        private const val FREE_FALL_G = 0.45f   // magnitude dips below this while falling
+        private const val IMPACT_G = 2.3f       // landing spike
+        private const val MOVING_LOW_G = 0.6f   // "still" band, lower bound
+        private const val MOVING_HIGH_G = 1.5f  // "still" band, upper bound
 
         // --- tunables, in ms ---
-        private const val FREE_FALL_MAX_MS = 1500L   // impact must follow free-fall within this
+        private const val FREE_FALL_MAX_MS = 1000L   // impact must follow free-fall within this
         private const val SETTLE_MS = 400L           // grace period after impact (bounce/settle)
-        private const val STILLNESS_WINDOW_MS = 1500L
+        private const val STILLNESS_WINDOW_MS = 2500L
         private const val COOLDOWN_MS = 30_000L      // debounce repeated alerts
     }
 }

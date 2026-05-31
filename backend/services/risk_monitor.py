@@ -25,6 +25,11 @@ FALL_WINDOW = timedelta(minutes=30)
 FRESH_OK = timedelta(minutes=5)
 FRESH_STALE = timedelta(minutes=30)
 
+# Stale data is a data-quality concern, not a clinical emergency. Cap the
+# freshness factor so a wearable that simply stopped syncing can never, on its
+# own, push the composite score into "high"/"critical" (i.e. call an ambulance).
+FRESH_MAX_SCORE = 50.0
+
 
 @dataclass(frozen=True)
 class RiskFactor:
@@ -126,10 +131,10 @@ def _score_freshness(age: timedelta) -> tuple[float, str]:
         mins = int(age.total_seconds() // 60)
         return 0.0, f"updated {mins} min ago"
     if age >= FRESH_STALE:
-        return 100.0, "no recent vitals (>30 min)"
+        return FRESH_MAX_SCORE, "no recent vitals (>30 min)"
     span = (age - FRESH_OK).total_seconds()
     window = (FRESH_STALE - FRESH_OK).total_seconds()
-    score = min(100.0, span / window * 100)
+    score = min(FRESH_MAX_SCORE, span / window * FRESH_MAX_SCORE)
     mins = int(age.total_seconds() // 60)
     return score, f"last reading {mins} min ago"
 
@@ -241,9 +246,9 @@ def compute_risk(session: Session, patient_id: int) -> RiskSnapshot:
         factors.append(
             RiskFactor(
                 name="Data freshness",
-                score=100.0,
+                score=FRESH_MAX_SCORE,
                 weight=WEIGHT_FRESHNESS,
-                detail="no vitals in the last 30 min",
+                detail="no vitals in the last 30 min — sensor may be offline",
             ),
         )
 

@@ -288,7 +288,7 @@ class VoiceSession(
     override fun onTtsBegin(sampleRate: Int) {
         watchdog?.cancel()
         stopPlayback()
-        player = AudioPlayer(sampleRate).also { it.start() }
+        player = AudioPlayer(context, sampleRate).also { it.start() }
         _state.value = _state.value.copy(phase = Phase.Speaking, level = 0f)
     }
 

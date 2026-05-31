@@ -3,6 +3,7 @@
 Single source of truth for env-derived config. Everything else imports
 `settings` from here.
 """
+
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     # Both render 24 kHz 16-bit mono PCM. Voice is chosen per-specialist at runtime.
     tts_backend: str = "kokoro"
     tts_model: str = "gpt-4o-mini-tts"  # OpenAI backend
-    tts_voice: str = "alloy"            # OpenAI default voice / fallback
+    tts_voice: str = "alloy"  # OpenAI default voice / fallback
 
     # Kokoro backend
     kokoro_voice_default: str = "af_heart"
@@ -85,9 +86,21 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # Frontend dev origins allowed by CORS
     cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Optional regex for additional allowed origins (e.g. LAN IPs / phone app).
+    cors_allow_origin_regex: str | None = None
 
     # CPU pinning
     always_on_cpu_cores: str = "0-5"
+
+    # Input safety gate (runs before routing on every /turn).
+    #   input_filter_enabled    — deterministic noise/sound scrub of the raw text
+    #                             before any model sees it (backend.agents.input_filter).
+    #   anomaly_detection_enabled — LLM gate that halts the turn on outlier /
+    #                             non-related input so no specialist or tool runs
+    #                             (backend.agents.anomaly). Costs one extra cheap
+    #                             model call per non-emergency turn; set False to skip.
+    input_filter_enabled: bool = True
+    anomaly_detection_enabled: bool = True
 
 
 settings = Settings()

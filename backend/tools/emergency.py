@@ -77,11 +77,27 @@ def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
 
     twilio = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
     twiml = f'<Response><Say voice="Polly.Joanna">{spoken_message}</Say></Response>'
-    call = twilio.calls.create(
-        to=emergency_number,
-        from_=os.getenv("TWILIO_FROM_NUMBER"),
-        twiml=twiml,
-    )
+    try:
+        call = twilio.calls.create(
+            to=emergency_number,
+            from_=os.getenv("TWILIO_FROM_NUMBER"),
+            twiml=twiml,
+        )
+    except Exception as exc:  # noqa: BLE001 — a dial failure must not crash the turn
+        # e.g. an unverified number on a Twilio trial account. Return a structured
+        # result so the safety agent keeps going (reassure, notify, log) instead of
+        # the whole turn aborting with a 500.
+        event = {
+            "tool": "call_911",
+            "status": "failed",
+            "service": "EMS",
+            "phone": emergency_number,
+            "reason": reason,
+            "location": location,
+            "error": str(exc)[:200],
+        }
+        CALL_LOG.append(event)
+        return event
 
     event = {
         "tool": "call_911",
@@ -173,15 +189,25 @@ def notify_caregiver(
                  "error": "no phone number on file"}
             )
             continue
-        call = twilio.calls.create(to=phone, from_=from_number, twiml=twiml)
+        try:
+            call = twilio.calls.create(to=phone, from_=from_number, twiml=twiml)
+        except Exception as exc:  # noqa: BLE001 — one bad number must not abort the rest
+            # e.g. an unverified number on a Twilio trial account. Record it and keep
+            # going so the other contacts are still reached and the turn completes.
+            calls.append(
+                {"contact": name, "relationship": rel, "phone": phone,
+                 "status": "failed", "error": str(exc)[:200]}
+            )
+            continue
         calls.append(
             {"contact": name, "relationship": rel, "phone": phone,
              "status": "called", "call_sid": call.sid}
         )
 
+    any_called = any(c.get("status") == "called" for c in calls)
     event = {
         "tool": "notify_caregiver",
-        "status": "called",
+        "status": "called" if any_called else "failed",
         "channel": "voice",
         "message": message,
         "calls": calls,

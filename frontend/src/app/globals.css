@@ -140,3 +140,8 @@
     @apply font-sans;
   }
 }
+
+@keyframes eq {
+  0%, 100% { height: 4px; }
+  50% { height: 12px; }
+}

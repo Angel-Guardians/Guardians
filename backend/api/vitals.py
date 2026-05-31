@@ -62,6 +62,7 @@ async def _after_ingest(
     monitor: RiskMonitor = request.app.state.risk_monitor
     bus = request.app.state.event_bus
     guardian = request.app.state.guardian
+    voice_monitor = getattr(request.app.state, "voice_monitor", None)
 
     snapshot, changed = monitor.compute(session, batch.patient_id)
     if bus is not None and changed:
@@ -89,6 +90,7 @@ async def _after_ingest(
                     batch.patient_id,
                     row.kind,
                     row.value,
+                    voice_monitor,
                 ),
             )
 

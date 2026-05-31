@@ -10,10 +10,12 @@ from loguru import logger
 from backend.api.call_bridge import emit_call_requests
 from backend.api.turn import _event_for
 from backend.events.types import TranscriptEvent
+from backend.voice.dashboard import speak_reply
 
 if TYPE_CHECKING:
     from backend.agents.guardian import GuardianAgent
     from backend.events.bus import EventBus
+    from backend.voice.monitor import VoiceMonitor
 
 _COOLDOWN_SEC = 60.0
 _last_fired: dict[tuple[int, str], float] = {}
@@ -48,6 +50,7 @@ async def trigger_fall_response(
     patient_id: int,
     kind: str,
     peak_g: float,
+    monitor: VoiceMonitor | None = None,
 ) -> None:
     """Run a Safety turn and publish pipeline events to the bus."""
     if guardian is None:
@@ -69,6 +72,8 @@ async def trigger_fall_response(
     try:
         result = await asyncio.to_thread(guardian.turn, message, emit, patient_id)
         await emit_call_requests(bus, result, patient_id)
+        # Voice the safety reply through Kokoro to the Live page speaker.
+        await speak_reply(monitor, result.get("reply", ""), result.get("route", "safety"))
         logger.info(
             f"Fall response complete for patient #{patient_id}: route={result.get('route')}",
         )

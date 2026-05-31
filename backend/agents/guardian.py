@@ -9,15 +9,21 @@ graph runs unchanged on OpenAI cloud or a local DGX Spark endpoint.
 Observability: with LANGSMITH_TRACING=true and LANGSMITH_API_KEY set, LangGraph
 traces each turn to LangSmith — one span per node, model calls nested beneath.
 """
+
 from __future__ import annotations
 
+from loguru import logger
+
+from backend.agents.anomaly import AnomalyDetectionAgent
 from backend.agents.behavior import BehaviorAgent
 from backend.agents.caregiver_liaison import CaregiverLiaisonAgent
 from backend.agents.companion import CompanionAgent
 from backend.agents.graph import build_guardian_graph
 from backend.agents.health import HealthAgent
+from backend.agents.input_filter import clean_input
 from backend.agents.reminder import ReminderAgent
 from backend.agents.safety import SafetyAgent
+from backend.config import settings
 from backend.llm import LLMClient, Message, build_llm
 from backend.llm.tracing import trace
 from backend.tools import ToolRegistry, build_default_registry
@@ -82,8 +88,21 @@ class GuardianAgent:
             "health": HealthAgent(self._llm, self._registry),
         }
         self._load_patient_context(patient_id)
+        # Input safety gate, wired ahead of the router. The noise filter is a cheap
+        # deterministic scrub; the anomaly gate halts the turn (no specialist, no
+        # tool) on outlier / non-related input. Both are toggleable via settings,
+        # and the gate shares the router's emergency keywords so it never blocks a
+        # possible emergency.
+        input_filter = clean_input if settings.input_filter_enabled else None
+        self._anomaly = (
+            AnomalyDetectionAgent(self._llm, safety_keywords=_SAFETY_KEYWORDS)
+            if settings.anomaly_detection_enabled
+            else None
+        )
         # Compile the LangGraph orchestrator once.
-        self._graph = build_guardian_graph(self.route, self._agents)
+        self._graph = build_guardian_graph(
+            self.route, self._agents, input_filter=input_filter, anomaly=self._anomaly
+        )
 
     def set_patient(self, patient_id: int) -> None:
         """Retarget the agent at a different patient.
@@ -99,11 +118,22 @@ class GuardianAgent:
         self._last_route = "companion"
         self._load_patient_context(patient_id)
 
+    def clear_history(self) -> None:
+        """Forget the running conversation so the next turns start fresh.
+
+        Keeps the current patient + persona context loaded; only the rolling
+        message history (and the last-route hint) is wiped, so the LLM answers
+        without being anchored to earlier turns.
+        """
+        self._history.clear()
+        self._last_route = "companion"
+
     def _load_patient_context(self, patient_id: int) -> None:
+        from sqlmodel import Session
+
         from backend.agents.prompts._base import build_patient_context
         from backend.db.session import engine
         from backend.services.patient_profile import PatientNotFoundError, get_patient_profile
-        from sqlmodel import Session
 
         try:
             with Session(engine) as session:
@@ -178,9 +208,12 @@ class GuardianAgent:
         )
         reply = result["reply"]
         route = result.get("route", "companion")
-        self._last_route = route
-        self._history.append(Message(role="user", content=user_message))
-        self._history.append(Message(role="assistant", content=reply))
+        # A blocked turn never ran a specialist; don't let "blocked" become the
+        # follow-up hint, and don't anchor history to a rejected utterance.
+        if route in _ROUTES:
+            self._last_route = route
+            self._history.append(Message(role="user", content=user_message))
+            self._history.append(Message(role="assistant", content=reply))
 
         tool_calls = [dict(e) for log in logs for e in log]
         return {"route": route, "reply": reply, "tool_calls": tool_calls}

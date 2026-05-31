@@ -5,51 +5,42 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DEMO_SCENARIOS } from "@/lib/agent-graph";
 import { stepLabel, type PipelineState } from "@/lib/pipeline-state";
 import { api } from "@/lib/api";
-import type { useDemoPipeline } from "@/hooks/useDemoPipeline";
 import { cn } from "@/lib/utils";
-
-export type LiveMode = "demo" | "live";
-
-type DemoControls = ReturnType<typeof useDemoPipeline>;
 
 interface LiveTurnPanelProps {
   pipeline: PipelineState;
-  mode: LiveMode;
-  onModeChange: (mode: LiveMode) => void;
-  demo: DemoControls;
   className?: string;
 }
 
-export function LiveTurnPanel({
-  pipeline,
-  mode,
-  onModeChange,
-  demo,
-  className,
-}: LiveTurnPanelProps) {
+export function LiveTurnPanel({ pipeline, className }: LiveTurnPanelProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handlePreset = (preset: (typeof DEMO_SCENARIOS)[number]) => {
-    setError(null);
-    onModeChange("demo");
-    setInput(demo.runScenario(preset));
-  };
-
-  const handleAdvance = () => {
-    onModeChange("demo");
-    demo.advanceStep(pipeline);
-    if (demo.scenario) setInput(demo.scenario.inputText);
-  };
+  const [notice, setNotice] = useState<string | null>(null);
 
   const handleReset = () => {
     setError(null);
+    setNotice(null);
     setInput("");
-    demo.reset();
+  };
+
+  // Forget the LLM's previous turns so the next answers aren't anchored to the
+  // earlier conversation (the patient profile/persona stays loaded).
+  const handleClearContext = async () => {
+    setError(null);
+    setNotice(null);
+    setClearing(true);
+    try {
+      await api.clearContext();
+      setNotice("Conversation context cleared — answers start fresh.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Clear context failed");
+    } finally {
+      setClearing(false);
+    }
   };
 
   const handleSend = async () => {
@@ -57,8 +48,6 @@ export function LiveTurnPanel({
     if (!text) return;
     setSending(true);
     setError(null);
-    onModeChange("live");
-    demo.clearTimer();
     try {
       await api.turn(text);
     } catch (e) {
@@ -69,37 +58,9 @@ export function LiveTurnPanel({
   };
 
   return (
-    <div className={cn("space-y-4 rounded-2xl border bg-card p-4 shadow-sm", className)}>
+    <div className={cn("space-y-3 rounded-[14px] border bg-card p-3.5", className)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Turn</span>
-          <div className="flex rounded-lg border p-0.5">
-            <button
-              type="button"
-              className={cn(
-                "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                mode === "demo"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => onModeChange("demo")}
-            >
-              Demo
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                mode === "live"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => onModeChange("live")}
-            >
-              Live
-            </button>
-          </div>
-        </div>
+        <span className="text-sm font-medium">Turn</span>
         <Badge variant="outline" className="font-mono text-xs">
           {stepLabel(pipeline.currentStep)}
         </Badge>
@@ -111,19 +72,29 @@ export function LiveTurnPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && mode === "live") void handleSend();
+            if (e.key === "Enter") void handleSend();
           }}
-          className="flex-1"
+          className="flex-1 rounded-[10px] bg-background"
         />
         <div className="flex shrink-0 gap-2">
           <Button
+            className="rounded-[9px]"
             onClick={() => void handleSend()}
             disabled={sending || !input.trim()}
           >
             {sending ? "Sending…" : "Send"}
           </Button>
-          <Button variant="outline" onClick={handleReset}>
+          <Button variant="outline" className="rounded-[9px]" onClick={handleReset}>
             Reset
+          </Button>
+          <Button
+            variant="outline"
+            className="rounded-[9px]"
+            onClick={() => void handleClearContext()}
+            disabled={clearing}
+            title="Forget the LLM's previous conversation so answers start fresh"
+          >
+            {clearing ? "Clearing…" : "Clear context"}
           </Button>
         </div>
       </div>
@@ -131,36 +102,8 @@ export function LiveTurnPanel({
       {error ? (
         <p className="text-xs text-destructive">{error}</p>
       ) : null}
-
-      <div className="flex flex-wrap gap-2">
-        {DEMO_SCENARIOS.map((preset) => (
-          <Button
-            key={preset.id}
-            variant="secondary"
-            size="sm"
-            disabled={demo.isPlaying}
-            onClick={() => handlePreset(preset)}
-          >
-            {preset.label}
-          </Button>
-        ))}
-        {mode === "demo" && demo.scenario ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={demo.isPlaying}
-            onClick={handleAdvance}
-          >
-            Advance step
-          </Button>
-        ) : null}
-      </div>
-
-      {mode === "demo" && pipeline.totalSteps > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Step {pipeline.stepIndex} of {pipeline.totalSteps}
-          {demo.scenario ? ` — ${demo.scenario.description}` : ""}
-        </p>
+      {notice ? (
+        <p className="text-xs text-muted-foreground">{notice}</p>
       ) : null}
     </div>
   );
