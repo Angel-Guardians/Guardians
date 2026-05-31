@@ -1,6 +1,8 @@
 import {
   AGENT_ROUTES,
+  TOOLS_BY_AGENT,
   isAgentRoute,
+  type AgentRoute,
   type NodeId,
   type PipelineStep,
 } from "@/lib/agent-graph";
@@ -16,6 +18,8 @@ export interface PipelineState {
   transcript: string;
   /** Edges highlighted on the graph (from → to). */
   activeEdges: Array<{ from: NodeId; to: NodeId }>;
+  /** Tools invoked this turn (parallel — order does not matter). */
+  usedTools: NodeId[];
 }
 
 const ALL_NODE_IDS: NodeId[] = [
@@ -47,7 +51,12 @@ export function initialPipelineState(): PipelineState {
     totalSteps: 0,
     transcript: "",
     activeEdges: [],
+    usedTools: [],
   };
+}
+
+function edgesForUsedTools(route: AgentRoute, tools: NodeId[]): PipelineState["activeEdges"] {
+  return tools.map((tool) => ({ from: route, to: tool }));
 }
 
 function setNode(
@@ -80,20 +89,15 @@ export function applyStep(
 ): PipelineState {
   let nodeStates = { ...prev.nodeStates };
   let activeRoute = prev.activeRoute;
-  const activeEdges: Array<{ from: NodeId; to: NodeId }> = [];
+  let activeEdges: Array<{ from: NodeId; to: NodeId }> = [];
+  let usedTools = [...prev.usedTools];
   let transcript = prev.transcript;
-
-  if (prev.currentStep?.kind === "tool_invocation") {
-    const tool = prev.currentStep.tool as NodeId;
-    if (ALL_NODE_IDS.includes(tool)) {
-      nodeStates = setNode(nodeStates, tool, "done");
-    }
-  }
 
   switch (step.kind) {
     case "transcript":
       transcript = step.text;
       nodeStates = idleNodes();
+      usedTools = [];
       nodeStates = setNode(nodeStates, "input", "active");
       activeEdges.push({ from: "input", to: "router" });
       break;
@@ -101,6 +105,7 @@ export function applyStep(
     case "routing_decision": {
       const route = step.routed_to;
       activeRoute = route;
+      usedTools = [];
       nodeStates = setNode(nodeStates, "input", "done");
       nodeStates = setNode(nodeStates, "router", "active");
       if (isAgentRoute(route)) {
@@ -114,12 +119,16 @@ export function applyStep(
     case "tool_invocation": {
       const tool = step.tool as NodeId;
       if (prev.activeRoute && isAgentRoute(prev.activeRoute)) {
+        const route = prev.activeRoute;
         nodeStates = setNode(nodeStates, "router", "done");
-        nodeStates = setNode(nodeStates, prev.activeRoute, "active");
-        if (ALL_NODE_IDS.includes(tool)) {
-          nodeStates = setNode(nodeStates, tool, "active");
-          activeEdges.push({ from: prev.activeRoute, to: tool });
+        nodeStates = setNode(nodeStates, route, "active");
+        if (ALL_NODE_IDS.includes(tool) && !usedTools.includes(tool)) {
+          usedTools = [...usedTools, tool];
         }
+        for (const t of usedTools) {
+          nodeStates = setNode(nodeStates, t, "done");
+        }
+        activeEdges = edgesForUsedTools(route, usedTools);
       }
       break;
     }
@@ -130,12 +139,12 @@ export function applyStep(
         nodeStates = setNode(nodeStates, "router", "done");
         nodeStates = setNode(nodeStates, agent, "done");
         activeRoute = agent;
-        // Mark any tools that were active as done
-        for (const id of ALL_NODE_IDS) {
-          if (nodeStates[id] === "active" && id !== agent) {
-            nodeStates = setNode(nodeStates, id, "done");
+        for (const t of TOOLS_BY_AGENT[agent]) {
+          if (usedTools.includes(t) || nodeStates[t] !== "idle") {
+            nodeStates = setNode(nodeStates, t, "done");
           }
         }
+        activeEdges = edgesForUsedTools(agent, usedTools);
       }
       break;
     }
@@ -149,6 +158,7 @@ export function applyStep(
     totalSteps,
     transcript,
     activeEdges,
+    usedTools,
   };
 }
 
@@ -169,7 +179,7 @@ export function stepLabel(step: PipelineStep | null): string {
     case "routing_decision":
       return `Routing → ${step.routed_to}`;
     case "tool_invocation":
-      return `Tool: ${step.tool}()`;
+      return `Tools in use: ${step.tool}()`;
     case "agent_reply":
       return `Reply from ${step.agent}`;
     default:

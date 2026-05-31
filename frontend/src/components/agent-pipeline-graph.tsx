@@ -23,9 +23,11 @@ import { stepLabel } from "@/lib/pipeline-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const CANVAS_H = 640;
-const AGENT_ROW_GAP = 86;
-const TOOL_GAP_X = 168;
+const CANVAS_H = 720;
+const AGENT_ROW_GAP = 88;
+const TOOL_NODE_H = 44;
+/** Center-to-center spacing — must exceed node height to avoid overlap. */
+const TOOL_STACK_GAP = TOOL_NODE_H + 20;
 
 const STAGE_X = {
   input: 130,
@@ -38,7 +40,7 @@ const STAGE_LABELS = [
   { x: STAGE_X.input, label: "Input" },
   { x: STAGE_X.router, label: "Router" },
   { x: STAGE_X.agents, label: "Specialists" },
-  { x: STAGE_X.tools + 80, label: "Tools" },
+  { x: STAGE_X.tools, label: "Tools (parallel)" },
 ] as const;
 
 const AGENT_ACCENT: Record<AgentRoute, string> = {
@@ -63,12 +65,6 @@ function agentRowY(index: number): number {
   return top + index * AGENT_ROW_GAP;
 }
 
-const TOOL_HOME_AGENT: Partial<Record<NodeId, AgentRoute>> = {
-  notify_caregiver: "safety",
-  recall_history: "companion",
-  find_cool_space: "safety",
-};
-
 function buildLayouts(activeRoute: AgentRoute | null): Record<NodeId, NodeLayout> {
   const layouts = {} as Record<NodeId, NodeLayout>;
   const midY = CANVAS_H / 2;
@@ -85,36 +81,24 @@ function buildLayouts(activeRoute: AgentRoute | null): Record<NodeId, NodeLayout
     };
   });
 
-  const toolOwner = (toolId: NodeId): AgentRoute => {
-    if (activeRoute && TOOLS_BY_AGENT[activeRoute].includes(toolId)) {
-      return activeRoute;
-    }
-    if (TOOL_HOME_AGENT[toolId]) return TOOL_HOME_AGENT[toolId]!;
-    for (const route of AGENT_ROUTES) {
-      if (TOOLS_BY_AGENT[route].includes(toolId)) return route;
-    }
-    return "companion";
-  };
-
-  const toolsPlaced = new Set<NodeId>();
-  for (const route of AGENT_ROUTES) {
-    const agentCy = layouts[route].cy;
-    let col = 0;
-    for (const toolId of TOOLS_BY_AGENT[route]) {
-      if (toolsPlaced.has(toolId)) continue;
-      if (toolOwner(toolId) !== route) continue;
+  if (activeRoute) {
+    const tools = TOOLS_BY_AGENT[activeRoute];
+    const agentCy = layouts[activeRoute].cy;
+    tools.forEach((toolId, i) => {
       layouts[toolId] = {
-        cx: STAGE_X.tools + col * TOOL_GAP_X,
-        cy: agentCy,
-        w: 140,
-        h: 42,
+        cx: STAGE_X.tools,
+        cy: agentCy + (i - (tools.length - 1) / 2) * TOOL_STACK_GAP,
+        w: 148,
+        h: TOOL_NODE_H,
       };
-      toolsPlaced.add(toolId);
-      col += 1;
-    }
+    });
   }
 
   return layouts;
+}
+
+function isToolForAgent(toolId: NodeId, route: AgentRoute | null): boolean {
+  return route !== null && TOOLS_BY_AGENT[route].includes(toolId);
 }
 
 function canvasWidth(layouts: Record<NodeId, NodeLayout>): number {
@@ -132,21 +116,34 @@ function getLayout(
   return layouts[id] ?? { cx: 0, cy: 0, w: 80, h: 36 };
 }
 
-function edgePath(from: NodeLayout, to: NodeLayout): string {
+const ARROW_SIZE = 9;
+
+/** Line stops before the arrowhead; tip sits on the target node's left edge. */
+function edgeGeometry(
+  from: NodeLayout,
+  to: NodeLayout,
+): { linePath: string; arrowPath: string } {
   const x1 = from.cx + from.w / 2;
   const y1 = from.cy;
-  const x2 = to.cx - to.w / 2;
+  const tipX = to.cx - to.w / 2;
   const y2 = to.cy;
-  const dx = x2 - x1;
+  const xLineEnd = tipX - ARROW_SIZE;
+  const dx = xLineEnd - x1;
 
+  let linePath: string;
   if (Math.abs(y2 - y1) < 6) {
-    return `M ${x1} ${y1} L ${x2} ${y2}`;
+    linePath = `M ${x1} ${y1} L ${xLineEnd} ${y2}`;
+  } else {
+    const bend = Math.min(56, Math.abs(dx) * 0.4);
+    const c1x = x1 + bend;
+    const c2x = xLineEnd - bend;
+    linePath = `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${xLineEnd} ${y2}`;
   }
 
-  const bend = Math.min(56, Math.abs(dx) * 0.4);
-  const c1x = x1 + bend;
-  const c2x = x2 - bend;
-  return `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
+  const half = ARROW_SIZE / 2;
+  const arrowPath = `M ${tipX - ARROW_SIZE} ${y2 - half} L ${tipX} ${y2} L ${tipX - ARROW_SIZE} ${y2 + half} Z`;
+
+  return { linePath, arrowPath };
 }
 
 function isEdgeActive(
@@ -166,11 +163,12 @@ function isOnPath(
   nodeId: NodeId,
   visual: PipelineState["nodeStates"][NodeId],
   route: AgentRoute | null,
+  usedTools: NodeId[],
 ): boolean {
   if (visual === "idle" || !route) return false;
   if (nodeId === "input" || nodeId === "router") return true;
   if (nodeId === route) return true;
-  return TOOLS_BY_AGENT[route].includes(nodeId);
+  return usedTools.includes(nodeId);
 }
 
 function isEdgeOnPath(
@@ -178,6 +176,7 @@ function isEdgeOnPath(
   to: NodeId,
   route: AgentRoute | null,
   states: PipelineState["nodeStates"],
+  usedTools: NodeId[],
 ): boolean {
   if (!route) return false;
   if (from === "input" && to === "router") {
@@ -187,10 +186,7 @@ function isEdgeOnPath(
     return states.router !== "idle" || states[route] !== "idle";
   }
   if (from === route) {
-    const tool = to as NodeId;
-    return (
-      TOOLS_BY_AGENT[route].includes(tool) && states[tool] !== "idle"
-    );
+    return usedTools.includes(to as NodeId);
   }
   return false;
 }
@@ -285,33 +281,6 @@ export function AgentPipelineGraph({
                 className="fill-foreground/10"
               />
             </pattern>
-            <marker
-              id="arrow"
-              markerWidth="10"
-              markerHeight="10"
-              refX="9"
-              refY="5"
-              orient="auto"
-            >
-              <path
-                d="M0,0 L10,5 L0,10 Z"
-                fill="var(--muted-foreground)"
-                fillOpacity="0.45"
-              />
-            </marker>
-            <marker
-              id="arrow-active"
-              markerWidth="10"
-              markerHeight="10"
-              refX="9"
-              refY="5"
-              orient="auto"
-            >
-              <path
-                d="M0,0 L10,5 L0,10 Z"
-                fill={pathColor ?? "var(--foreground)"}
-              />
-            </marker>
           </defs>
 
           <rect width={canvasW} height={CANVAS_H} fill="url(#canvas-bg)" />
@@ -329,84 +298,62 @@ export function AgentPipelineGraph({
             </text>
           ))}
 
-          {edges.map((edge) => {
-            const fromL = getLayout(edge.from, layouts);
-            const toL = getLayout(edge.to, layouts);
-            const active = isEdgeActive(
-              edge.from,
-              edge.to,
-              pipeline.activeEdges,
-            );
-            const onPathEdge = isEdgeOnPath(
-              edge.from,
-              edge.to,
-              emphasizedAgent,
-              pipeline.nodeStates,
-            );
-            const edgeColor = onPathEdge
-              ? routeColor(emphasizedAgent)
-              : "var(--border)";
-
-            return (
-              <g key={`${edge.from}-${edge.to}`}>
-                <path
-                  d={edgePath(fromL, toL)}
-                  fill="none"
-                  markerEnd={onPathEdge ? "url(#arrow-active)" : "url(#arrow)"}
-                  stroke={edgeColor}
-                  strokeOpacity={
-                    active ? 1 : onPathEdge ? 0.7 : 0.45
-                  }
-                  strokeWidth={active ? 2.5 : onPathEdge ? 2 : 1.25}
-                  strokeLinecap="round"
-                  strokeDasharray={active ? "10 6" : undefined}
-                  className={active ? "animate-pulse" : undefined}
-                />
-              </g>
-            );
-          })}
-
           {AGENT_GRAPH.nodes.map((node) => {
+            const isTool = node.kind === "tool";
+            if (isTool && !isToolForAgent(node.id, emphasizedAgent)) {
+              return null;
+            }
+
             const layout = getLayout(node.id, layouts);
             const visual = pipeline.nodeStates[node.id] ?? "idle";
-            const isTool = node.kind === "tool";
             const isAgent = node.kind === "agent";
-            const dimTool =
-              isTool &&
-              emphasizedAgent &&
-              !TOOLS_BY_AGENT[emphasizedAgent].includes(node.id);
             const dimAgent =
               isAgent &&
               emphasizedAgent &&
               node.routeId !== emphasizedAgent &&
               visual === "idle";
+            const toolUsed =
+              isTool &&
+              emphasizedAgent &&
+              pipeline.usedTools.includes(node.id);
 
             const x = layout.cx - layout.w / 2;
             const y = layout.cy - layout.h / 2;
-            const onPath = isOnPath(node.id, visual, emphasizedAgent);
-            const lit = visual !== "idle" && !(dimTool || dimAgent);
-            const stroke = onPath
+            const onPath = isOnPath(
+              node.id,
+              visual,
+              emphasizedAgent,
+              pipeline.usedTools,
+            );
+            const lit = visual !== "idle" && !dimAgent;
+            const stroke = toolUsed
               ? routeColor(emphasizedAgent)
-              : lit
-                ? "var(--foreground)"
-                : "var(--border)";
-            const strokeWidth =
-              onPath && visual === "active"
-                ? 3
-                : onPath && visual === "done"
-                  ? 2
+              : isTool && emphasizedAgent
+                ? "var(--border)"
+                : onPath
+                  ? routeColor(emphasizedAgent)
                   : lit
-                    ? 1.75
-                    : 1.25;
-            const strokeOpacity =
-              onPath && visual === "done" ? 0.55 : 1;
+                    ? "var(--foreground)"
+                    : "var(--border)";
+            const strokeWidth = toolUsed
+              ? 2.5
+              : isTool && emphasizedAgent
+                ? 1.5
+                : onPath && visual === "active"
+                  ? 3
+                  : onPath && visual === "done"
+                    ? 2
+                    : lit
+                      ? 1.75
+                      : 1.25;
+            const strokeOpacity = toolUsed ? 1 : onPath && visual === "done" ? 0.55 : 1;
 
             return (
               <g
                 key={node.id}
                 className={cn(
                   "transition-all duration-500",
-                  dimTool || dimAgent ? "opacity-12" : "opacity-100",
+                  dimAgent ? "opacity-25" : "opacity-100",
                 )}
               >
                 <rect
@@ -426,11 +373,13 @@ export function AgentPipelineGraph({
                   textAnchor="middle"
                   dominantBaseline="central"
                   fill={
-                    lit ? "var(--foreground)" : "var(--muted-foreground)"
+                    toolUsed || onPath || lit
+                      ? "var(--foreground)"
+                      : "var(--muted-foreground)"
                   }
                   className={cn(
                     "pointer-events-none select-none font-sans",
-                    (onPath || lit) && "font-semibold",
+                    (toolUsed || onPath || lit) && "font-semibold",
                     isTool && "font-mono",
                   )}
                   fontSize={
@@ -439,6 +388,51 @@ export function AgentPipelineGraph({
                 >
                   {node.label}
                 </text>
+              </g>
+            );
+          })}
+
+          {edges.map((edge) => {
+            const fromL = getLayout(edge.from, layouts);
+            const toL = getLayout(edge.to, layouts);
+            const active = isEdgeActive(
+              edge.from,
+              edge.to,
+              pipeline.activeEdges,
+            );
+            const onPathEdge = isEdgeOnPath(
+              edge.from,
+              edge.to,
+              emphasizedAgent,
+              pipeline.nodeStates,
+              pipeline.usedTools,
+            );
+            const edgeColor = onPathEdge
+              ? routeColor(emphasizedAgent)
+              : "var(--border)";
+            const { linePath, arrowPath } = edgeGeometry(fromL, toL);
+            const strokeOpacity = active ? 1 : onPathEdge ? 0.7 : 0.45;
+            const strokeWidth = active ? 2.5 : onPathEdge ? 2 : 1.25;
+
+            return (
+              <g key={`${edge.from}-${edge.to}`} pointerEvents="none">
+                <path
+                  d={linePath}
+                  fill="none"
+                  stroke={edgeColor}
+                  strokeOpacity={strokeOpacity}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray={active ? "10 6" : undefined}
+                  className={active ? "animate-pulse" : undefined}
+                />
+                <path
+                  d={arrowPath}
+                  fill={edgeColor}
+                  fillOpacity={strokeOpacity}
+                  stroke="none"
+                />
               </g>
             );
           })}
