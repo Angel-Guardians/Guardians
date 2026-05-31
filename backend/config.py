@@ -85,6 +85,19 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # Frontend dev origins allowed by CORS
     cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Regex for non-localhost frontends on :3000 — RFC1918 LAN (10.x, 192.168.x,
+    # 172.16–31.x) and Tailscale (100.x / *.ts.net). Lets a browser on another
+    # device reach the API without baking each IP into cors_allow_origins.
+    cors_allow_origin_regex: str = (
+        r"http://("
+        r"localhost|127\.0\.0\.1"
+        r"|10\.\d+\.\d+\.\d+"
+        r"|192\.168\.\d+\.\d+"
+        r"|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+"
+        r"|100\.\d+\.\d+\.\d+"
+        r"|[\w-]+\.ts\.net"
+        r"):3000"
+    )
 
     # CPU pinning
     always_on_cpu_cores: str = "0-5"
