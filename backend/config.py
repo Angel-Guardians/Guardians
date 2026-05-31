@@ -18,10 +18,19 @@ class Settings(BaseSettings):
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
 
-    # Text-to-speech for the voice WebSocket (OpenAI; needs the real OpenAI endpoint
-    # via OPENAI_API_KEY below). voice can be overridden per-turn by the specialist.
-    tts_model: str = "gpt-4o-mini-tts"
-    tts_voice: str = "alloy"
+    # Text-to-speech for the voice WebSocket. `tts_backend` selects the engine:
+    #   "kokoro" — local, offline neural TTS (default; needs the [audio] extra)
+    #   "openai" — cloud gpt-4o-mini-tts (needs OPENAI_API_KEY below)
+    #   "auto"   — Kokoro if the package is importable, else OpenAI
+    # Both render 24 kHz 16-bit mono PCM. Voice is chosen per-specialist at runtime.
+    tts_backend: str = "kokoro"
+    tts_model: str = "gpt-4o-mini-tts"  # OpenAI backend
+    tts_voice: str = "alloy"            # OpenAI default voice / fallback
+
+    # Kokoro backend
+    kokoro_voice_default: str = "af_heart"
+    kokoro_lang_code: str = "a"  # 'a' = American English
+    kokoro_speed: float = 1.0
 
     # LLM (LEGACY — NOT used by the live conversational path).
     # The running app configures its model in backend/llm/config.py via LLM_* env

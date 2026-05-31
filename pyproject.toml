@@ -37,13 +37,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Always-on audio tier (STT/wake-word/TTS). Kept optional because kokoro
-# currently constrains numpy and its misaki dep has no wheel on some platforms.
+# Always-on audio tier (STT/wake-word) + Kokoro TTS.
+#
+# NOTE on Kokoro + Python 3.13: `kokoro>=0.7` pins `numpy==1.26.4`, which has no
+# 3.13 wheel and conflicts with our core `numpy>=2.1`. Kokoro runs fine on numpy
+# 2.x, so on 3.13 install it without its deps and add the runtime ones explicitly:
+#
+#   pip install kokoro==0.7.4 --no-deps
+#   pip install num2words "spacy" phonemizer-fork espeakng-loader soundfile --only-binary=:all:
+#
+# (spacy auto-downloads en_core_web_sm + the Kokoro-82M weights on first synth.)
+# On Linux / the DGX Spark target, plain `pip install -e ".[audio]"` works.
+# If Kokoro can't load, backend/voice/tts.py falls back to OpenAI TTS automatically.
 audio = [
     "sounddevice>=0.5",
     "faster-whisper>=1.1",
     "openwakeword>=0.6",
     "kokoro>=0.7",
+    "soundfile>=0.12",
 ]
 # MyCareCompass portal automation (LifeLabs has no public patient API).
 crawler = [
