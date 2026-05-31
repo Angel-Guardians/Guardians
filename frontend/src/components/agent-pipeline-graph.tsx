@@ -252,12 +252,12 @@ export function AgentPipelineGraph({
         </div>
       </div>
 
-      <div className="w-full overflow-auto">
+      <div className="w-full overflow-x-auto overflow-y-hidden p-4 sm:p-6">
         <svg
           viewBox={`0 0 ${canvasW} ${CANVAS_H}`}
           width={canvasW}
           height={CANVAS_H}
-          className="min-h-[400px] min-w-full"
+          className="mx-auto block min-h-[400px]"
           style={{ minWidth: canvasW }}
           role="img"
           aria-label="Guardian agent pipeline graph"
@@ -278,7 +278,7 @@ export function AgentPipelineGraph({
                 cx="1"
                 cy="1"
                 r="0.75"
-                className="fill-foreground/10"
+                className="fill-muted-foreground/25"
               />
             </pattern>
           </defs>

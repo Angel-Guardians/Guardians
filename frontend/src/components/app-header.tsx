@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ProfileCorner } from "@/components/profile-corner";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 export function AppHeader() {
@@ -43,7 +44,10 @@ export function AppHeader() {
             </div>
           </Link>
         </div>
-        <ProfileCorner />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <ProfileCorner />
+        </div>
       </div>
     </header>
   );

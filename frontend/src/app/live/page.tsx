@@ -87,15 +87,15 @@ export default function LivePage() {
         action={<StatusBadge status={status} />}
       />
 
-      <Card className="overflow-hidden rounded-2xl border-0 bg-transparent shadow-none">
-        <CardHeader className="px-0 pb-2">
+      <Card className="overflow-hidden rounded-2xl shadow-sm">
+        <CardHeader className="pb-2">
           <CardTitle>Agent pipeline</CardTitle>
           <p className="text-sm text-muted-foreground">
             Left to right: input → router → specialist → tools. Use the demo bar
             below the graph to preview the flow.
           </p>
         </CardHeader>
-        <CardContent className="space-y-4 p-0">
+        <CardContent className="space-y-4">
           <AgentPipelineGraph
             pipeline={pipeline}
             onRunDemo={handleGraphDemo}
