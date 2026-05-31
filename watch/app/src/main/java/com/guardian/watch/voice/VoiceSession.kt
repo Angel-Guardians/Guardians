@@ -3,6 +3,7 @@ package com.guardian.watch.voice
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.guardian.watch.data.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
@@ -75,19 +76,29 @@ class VoiceSession(
         recordJob = scope.launch {
             val baseUrl = settings.baseUrl.first()
             val patientId = settings.patientId.first()
+            Log.i(TAG, "startTalking: baseUrl=$baseUrl patientId=$patientId connected=${client.isConnected}")
             client.connect(baseUrl)
             client.sendStart(patientId, AudioRecorder.SAMPLE_RATE)
             _state.value = _state.value.copy(phase = Phase.Listening)
             launch(Dispatchers.IO) {
+                var frames = 0
                 runCatching {
-                    recorder.record { chunk, len -> client.sendAudio(chunk, len) }
-                }.onFailure { _state.value = _state.value.copy(error = it.message) }
+                    recorder.record { chunk, len ->
+                        client.sendAudio(chunk, len)
+                        frames++
+                    }
+                }.onFailure {
+                    Log.w(TAG, "recorder failed", it)
+                    _state.value = _state.value.copy(error = it.message)
+                }
+                Log.i(TAG, "recorder stopped after $frames frames")
             }
         }
     }
 
     /** Push-to-talk released: stop the mic and ask the backend to answer. */
     fun stopTalking() {
+        Log.i(TAG, "stopTalking: phase=${_state.value.phase}")
         recorder.stop()
         recordJob = null
         if (_state.value.phase == Phase.Listening || _state.value.phase == Phase.Connecting) {
@@ -143,6 +154,7 @@ class VoiceSession(
     }
 
     override fun onError(message: String) {
+        Log.w(TAG, "onError: $message")
         recorder.stop()
         stopPlayback()
         _state.value = _state.value.copy(phase = Phase.Idle, error = message)
@@ -152,5 +164,9 @@ class VoiceSession(
         if (_state.value.phase != Phase.Idle) {
             _state.value = _state.value.copy(phase = Phase.Idle)
         }
+    }
+
+    private companion object {
+        const val TAG = "GuardianVoice"
     }
 }

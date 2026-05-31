@@ -1,5 +1,6 @@
 package com.guardian.watch.voice
 
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -48,6 +49,7 @@ class VoiceStreamClient(private val listener: Listener) {
     fun connect(baseUrl: String) {
         if (webSocket != null) return
         val wsUrl = toWebSocketUrl(baseUrl)
+        Log.i(TAG, "connect -> $wsUrl (from baseUrl=$baseUrl)")
         val request = Request.Builder().url(wsUrl).build()
         webSocket = client.newWebSocket(request, socketListener)
     }
@@ -58,7 +60,8 @@ class VoiceStreamClient(private val listener: Listener) {
             .put("type", "start")
             .put("patient_id", patientId)
             .put("sample_rate", sampleRate)
-        webSocket?.send(msg.toString())
+        val ok = webSocket?.send(msg.toString())
+        Log.i(TAG, "sendStart enqueued=$ok")
     }
 
     fun sendAudio(pcm: ByteArray, length: Int) {
@@ -67,7 +70,8 @@ class VoiceStreamClient(private val listener: Listener) {
 
     /** End the utterance; the server replies with transcript/reply/tts frames. */
     fun sendEnd() {
-        webSocket?.send(JSONObject().put("type", "end").toString())
+        val ok = webSocket?.send(JSONObject().put("type", "end").toString())
+        Log.i(TAG, "sendEnd enqueued=$ok")
     }
 
     fun close() {
@@ -76,9 +80,13 @@ class VoiceStreamClient(private val listener: Listener) {
     }
 
     private val socketListener = object : WebSocketListener() {
-        override fun onOpen(ws: WebSocket, response: Response) = listener.onOpen()
+        override fun onOpen(ws: WebSocket, response: Response) {
+            Log.i(TAG, "onOpen: ${response.code} ${response.message}")
+            listener.onOpen()
+        }
 
         override fun onMessage(ws: WebSocket, text: String) {
+            Log.i(TAG, "onMessage(text): $text")
             val json = runCatching { JSONObject(text) }.getOrNull() ?: return
             when (json.optString("type")) {
                 "transcript" -> listener.onTranscript(json.optString("text"))
@@ -94,11 +102,17 @@ class VoiceStreamClient(private val listener: Listener) {
         }
 
         override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+            Log.w(TAG, "onFailure: code=${response?.code} msg=${t.message}", t)
             webSocket = null
             listener.onError(t.message ?: "connection failed")
         }
 
+        override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+            Log.i(TAG, "onClosing: $code $reason")
+        }
+
         override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+            Log.i(TAG, "onClosed: $code $reason")
             webSocket = null
             listener.onClosed()
         }
@@ -112,5 +126,9 @@ class VoiceStreamClient(private val listener: Listener) {
             else -> "ws://$normalized"
         }
         return "$scheme/voice/ws"
+    }
+
+    private companion object {
+        const val TAG = "GuardianVoice"
     }
 }
