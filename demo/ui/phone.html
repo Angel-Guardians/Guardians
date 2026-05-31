@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guardian — Matthew (Phone)</title>
+<style>
+  /* ---- design tokens mirrored from frontend/src/app/globals.css ---- */
+  :root{
+    --background: oklch(0.985 0.004 240);
+    --foreground: oklch(0.18 0.02 250);
+    --card: oklch(1 0.002 240);
+    --muted: oklch(0.955 0.008 240);
+    --muted-foreground: oklch(0.52 0.02 250);
+    --primary: oklch(0.42 0.12 230);
+    --primary-foreground: oklch(0.98 0.005 240);
+    --border: oklch(0.91 0.012 240);
+    --destructive: oklch(0.577 0.245 27.325);
+    --ok: oklch(0.62 0.13 150);
+    --warn: oklch(0.74 0.15 75);
+    --radius: 0.75rem;
+    --font: ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--font);
+    background:
+      radial-gradient(1200px 600px at 50% -10%, oklch(0.94 0.03 230), transparent),
+      oklch(0.93 0.01 240);
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:18px;padding:24px;color:var(--foreground);
+  }
+
+  /* ---- phone frame: full rectangle, clean status bar, NO blacked notch ---- */
+  .phone{
+    width:390px;height:800px;border-radius:42px;background:#0b0f17;
+    padding:12px;box-shadow:0 30px 70px -20px oklch(0.3 0.05 250 / .55), 0 0 0 1px oklch(0.3 0.05 250 / .15);
+    position:relative;
+  }
+  .screen{
+    width:100%;height:100%;border-radius:31px;background:var(--background);
+    overflow:hidden;position:relative;display:flex;flex-direction:column;
+  }
+  .statusbar{
+    height:34px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px;font-size:13px;font-weight:600;color:var(--foreground);flex:0 0 auto;
+  }
+  .statusbar .right{display:flex;align-items:center;gap:6px}
+  .statusbar svg{width:15px;height:15px}
+
+  /* ---- app header ---- */
+  .appbar{
+    flex:0 0 auto;padding:6px 18px 10px;display:flex;align-items:center;
+    justify-content:space-between;
+  }
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:16px}
+  .brand .logo{
+    width:30px;height:30px;border-radius:9px;background:var(--primary);
+    display:grid;place-items:center;color:var(--primary-foreground)
+  }
+  .brand .logo svg{width:17px;height:17px}
+  .brand small{display:block;font-weight:500;font-size:11px;color:var(--muted-foreground)}
+  .avatar{
+    width:40px;height:40px;border-radius:50%;border:2px solid var(--border);
+    background:linear-gradient(135deg,oklch(0.78 0.07 230),oklch(0.6 0.1 250));
+    color:#fff;font-weight:700;display:grid;place-items:center;cursor:pointer;
+    font-size:15px;flex:0 0 auto;transition:transform .15s, box-shadow .15s;
+  }
+  .avatar:hover{transform:scale(1.05);box-shadow:0 0 0 4px oklch(0.42 0.12 230 / .15)}
+  .avatar.ping{animation:avatarPing 1.4s infinite}
+  @keyframes avatarPing{0%{box-shadow:0 0 0 0 oklch(0.42 0.12 230 / .5)}70%{box-shadow:0 0 0 10px oklch(0.42 0.12 230 / 0)}100%{box-shadow:0 0 0 0 transparent}}
+
+  /* agent state pill */
+  .agent-row{flex:0 0 auto;padding:0 18px 8px;display:flex}
+  .agent-pill{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:650;
+    padding:5px 11px;border-radius:999px;background:var(--muted);color:var(--muted-foreground);transition:.3s}
+  .agent-pill .pd{width:8px;height:8px;border-radius:50%;background:var(--muted-foreground)}
+  .agent-pill.active{background:oklch(0.92 0.05 230);color:var(--primary)} .agent-pill.active .pd{background:var(--primary);animation:pulse 1.8s infinite}
+  .agent-pill.alert{background:oklch(0.92 0.07 25);color:var(--destructive)} .agent-pill.alert .pd{background:var(--destructive);animation:pulse 1s infinite}
+
+  /* ---- main content (single page, no scroll) ---- */
+  .content{flex:1 1 auto;padding:2px 18px 18px;display:flex;flex-direction:column;gap:12px;min-height:0}
+
+  .status-card{
+    border-radius:20px;padding:18px;color:#fff;position:relative;overflow:hidden;
+    flex:0 0 auto;transition:background .5s ease;
+    background:linear-gradient(135deg, oklch(0.6 0.12 150), oklch(0.5 0.12 160));
+  }
+  .status-card.idle{background:linear-gradient(135deg, oklch(0.55 0.03 250), oklch(0.45 0.03 255))}
+  .status-card.warn{background:linear-gradient(135deg, oklch(0.72 0.15 75), oklch(0.64 0.15 60))}
+  .status-card.alert{background:linear-gradient(135deg, oklch(0.6 0.22 25), oklch(0.5 0.2 20))}
+  .status-card .st-top{display:flex;align-items:center;gap:10px;font-size:13px;opacity:.92;font-weight:600}
+  .status-card .st-top .pulse{width:9px;height:9px;border-radius:50%;background:#fff;box-shadow:0 0 0 0 rgba(255,255,255,.7);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.6)}70%{box-shadow:0 0 0 12px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
+  .status-card h1{font-size:22px;margin-top:10px;line-height:1.2;font-weight:750}
+  .status-card p{font-size:13px;opacity:.92;margin-top:6px;line-height:1.45}
+
+  /* confirm buttons inside status card */
+  .confirm-row{display:flex;gap:10px;margin-top:14px}
+  .confirm-row button{
+    flex:1;border:0;border-radius:13px;padding:13px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;
+  }
+  .btn-ok{background:#fff;color:#7a1f12}
+  .btn-help{background:rgba(0,0,0,.28);color:#fff;border:1.5px solid rgba(255,255,255,.5)!important}
+  .countdown{margin-top:12px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600}
+  .cring{width:34px;height:34px;flex:0 0 auto}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:0 0 auto}
+  .vital{
+    background:var(--card);border:1px solid var(--border);border-radius:15px;padding:12px 13px;
+  }
+  .vital .vh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted-foreground);font-weight:600}
+  .vital .vh svg{width:14px;height:14px}
+  .vital .vv{font-size:21px;font-weight:750;margin-top:5px;display:flex;align-items:baseline;gap:4px}
+  .vital .vv span.u{font-size:11px;font-weight:600;color:var(--muted-foreground)}
+  .vital.hot .vv{color:var(--destructive)}
+  .spark{height:18px;margin-top:4px;width:100%}
+
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:12px 14px;flex:0 0 auto}
+  .panel .ph{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted-foreground);font-weight:600;margin-bottom:8px}
+  .row{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13.5px}
+  .row+.row{border-top:1px solid var(--border)}
+  .row .ic{width:30px;height:30px;border-radius:9px;background:var(--muted);display:grid;place-items:center;flex:0 0 auto}
+  .row .ic svg{width:16px;height:16px;color:var(--primary)}
+  .row .meta{flex:1;min-width:0}
+  .row .meta b{font-weight:650}
+  .row .meta small{display:block;color:var(--muted-foreground);font-size:11.5px}
+  .tag{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--muted);color:var(--muted-foreground)}
+  .tag.green{background:oklch(0.9 0.06 150);color:oklch(0.4 0.12 150)}
+  .tag.red{background:oklch(0.92 0.07 25);color:oklch(0.5 0.2 25)}
+  .tag.blue{background:oklch(0.9 0.05 230);color:var(--primary)}
+
+  /* profile sheet overlay (inside the screen) */
+  .sheet{
+    position:absolute;inset:0;background:var(--background);z-index:5;
+    transform:translateY(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;
+  }
+  .sheet.open{transform:translateY(0)}
+  .sheet-bar{display:flex;align-items:center;gap:12px;padding:16px 18px 8px}
+  .sheet-bar button{border:0;background:var(--muted);width:34px;height:34px;border-radius:10px;cursor:pointer;display:grid;place-items:center}
+  .sheet-bar button svg{width:18px;height:18px;color:var(--foreground)}
+  .sheet-bar h2{font-size:17px;font-weight:700}
+  .sheet-body{flex:1;overflow:auto;padding:6px 18px 20px;display:flex;flex-direction:column;gap:14px}
+  .pf-top{display:flex;align-items:center;gap:14px}
+  .pf-top .avatar{width:62px;height:62px;font-size:22px;cursor:default}
+  .pf-top .who b{font-size:18px;font-weight:750}
+  .pf-top .who small{color:var(--muted-foreground);font-size:13px;display:block;margin-top:2px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11.5px;font-weight:650;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.03em}
+  .field .ed{display:flex;gap:8px}
+  .field input{flex:1;border:1px solid var(--border);border-radius:11px;padding:10px 12px;font-size:14px;font-family:inherit;background:var(--card);color:var(--foreground)}
+  .field input:focus{outline:2px solid oklch(0.55 0.1 230 / .4);border-color:var(--primary)}
+  .field .save{border:0;background:var(--primary);color:#fff;border-radius:11px;padding:0 14px;font-weight:650;cursor:pointer;font-size:13px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--muted);color:var(--foreground)}
+  .chip.flag{background:oklch(0.92 0.07 25);color:oklch(0.5 0.2 25)}
+  .chip .x{border:0;background:transparent;color:inherit;opacity:.5;cursor:pointer;font-size:14px;font-weight:700;padding:0;line-height:1;font-family:inherit}
+  .chip .x:hover{opacity:1}
+  .row .del{border:0;background:transparent;cursor:pointer;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto;color:var(--muted-foreground)}
+  .row .del:hover{background:oklch(0.92 0.07 25);color:var(--destructive)}
+  .row .del svg{width:15px;height:15px}
+  .addbtn{margin-top:9px;width:100%;border:1px dashed var(--border);background:var(--card);color:var(--primary);border-radius:11px;padding:9px 14px;font-weight:650;font-size:13px;cursor:pointer;font-family:inherit}
+  .addbtn:hover{background:oklch(0.97 0.012 230);border-color:var(--primary)}
+  .saved-toast{position:absolute;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--foreground);color:var(--background);padding:9px 16px;border-radius:999px;font-size:12.5px;font-weight:600;opacity:0;transition:.25s;pointer-events:none}
+  .saved-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ---- filming controls (outside the phone) ---- */
+  .controls{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);
+    border-radius:999px;padding:8px 14px;box-shadow:0 8px 24px -12px oklch(0.3 0.05 250 / .4)}
+  .controls button{border:0;background:var(--muted);border-radius:9px;padding:8px 12px;cursor:pointer;font-weight:650;font-size:13px;font-family:inherit;color:var(--foreground)}
+  .controls button.primary{background:var(--primary);color:#fff}
+  .controls .lbl{font-size:12.5px;color:var(--muted-foreground);min-width:220px;text-align:center;font-weight:600}
+  .hint{font-size:11.5px;color:var(--muted-foreground)}
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="screen">
+    <!-- status bar (clean, no notch) -->
+    <div class="statusbar">
+      <span id="clock">2:10</span>
+      <span class="right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 18a7 7 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M8.5 15a4 4 0 0 1 7 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 26 14"><rect x="1" y="2" width="20" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="4" width="15" height="6" rx="1.5" fill="currentColor"/><rect x="22" y="5" width="2.5" height="4" rx="1" fill="currentColor"/></svg>
+      </span>
+    </div>
+
+    <!-- app bar -->
+    <div class="appbar">
+      <div class="brand">
+        <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></span>
+        <div>Guardian<small>Watching over you</small></div>
+      </div>
+      <div class="avatar" id="avatar" title="View profile" onclick="openSheet()">MB</div>
+    </div>
+    <div class="agent-row">
+      <span class="agent-pill" id="agentPill"><span class="pd"></span><span id="agentTxt">Guardian asleep · standby</span></span>
+    </div>
+
+    <!-- main content -->
+    <div class="content">
+      <div class="status-card" id="statusCard">
+        <div class="st-top"><span class="pulse"></span><span id="stState">All quiet</span></div>
+        <h1 id="stTitle">Good night, Matthew.</h1>
+        <p id="stBody">Everything looks calm. Your heart rhythm is steady and I'm keeping watch while you sleep.</p>
+        <div id="stExtra"></div>
+      </div>
+
+      <div class="grid2">
+        <div class="vital" id="vHr">
+          <div class="vh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l2 5 4-10 2 5h6"/></svg> Heart rate</div>
+          <div class="vv"><span id="hrVal">57</span><span class="u">bpm</span></div>
+          <svg class="spark" id="hrSpark" viewBox="0 0 120 18" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="vital" id="vSpo2">
+          <div class="vh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2s6 6 6 11a6 6 0 0 1-12 0c0-5 6-11 6-11Z"/></svg> Oxygen</div>
+          <div class="vv"><span id="spo2Val">97</span><span class="u">% SpO₂</span></div>
+          <div class="hint" id="spo2Note" style="margin-top:6px">Normal range</div>
+        </div>
+      </div>
+
+      <div class="panel" id="todayPanel">
+        <div class="ph"><span>Today</span><span class="tag green" id="dayTag">On track</span></div>
+        <div class="row">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span>
+          <span class="meta"><b>Evening medication</b><small>Metoprolol · Apixaban · taken 9:02pm</small></span>
+          <span class="tag green">Done</span>
+        </div>
+        <div class="row">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>
+          <span class="meta"><b>Sophie (caregiver, RN)</b><small>Same building · checks in daily</small></span>
+          <span class="tag blue">Nearby</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- profile sheet -->
+    <div class="sheet" id="sheet">
+      <div class="sheet-bar">
+        <button onclick="closeSheet()" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+        <h2>My profile</h2>
+      </div>
+      <div class="sheet-body">
+        <div class="pf-top" id="pfTop">
+          <div class="avatar">MB</div>
+          <div class="who"><b>Matthew Brennan</b><small>78 · lives alone · St. James Town, Toronto</small></div>
+        </div>
+
+        <div class="field" id="fAddr">
+          <label>Home address</label>
+          <div class="ed">
+            <input id="addr" value="200 Wellesley St E, Apt 1407" />
+            <button class="save" onclick="saveField('addr')">Save</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <div class="ed">
+            <input id="phoneNum" value="(416) 555-0190" />
+            <button class="save" onclick="saveField('phoneNum')">Save</button>
+          </div>
+        </div>
+
+        <div class="field" id="fConditions">
+          <label>Conditions</label>
+          <div class="chips" id="condChips">
+            <span class="chip flag">Atrial fibrillation<button class="x" onclick="delChip(this)">×</button></span>
+            <span class="chip flag">Prior heart attack<button class="x" onclick="delChip(this)">×</button></span>
+            <span class="chip">Heart failure (mild)<button class="x" onclick="delChip(this)">×</button></span>
+            <span class="chip">Type 2 diabetes<button class="x" onclick="delChip(this)">×</button></span>
+          </div>
+          <button class="addbtn" onclick="addChip('condChips','Add a condition',true)">+ Add condition</button>
+        </div>
+        <div class="field" id="fMeds">
+          <label>Medications &amp; schedule</label>
+          <div class="panel" style="padding:6px 12px" id="medList">
+            <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span><span class="meta"><b>Apixaban</b><small>5 mg · 8:00 AM &amp; 8:00 PM · with food</small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>
+            <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span><span class="meta"><b>Metoprolol</b><small>50 mg · 8:00 AM &amp; 8:00 PM</small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>
+            <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span><span class="meta"><b>Furosemide</b><small>40 mg · 8:00 AM</small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>
+            <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span><span class="meta"><b>Atorvastatin</b><small>20 mg · 9:00 PM</small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>
+          </div>
+          <button class="addbtn" onclick="addMed()">+ Add medication</button>
+        </div>
+        <div class="field" id="fContacts">
+          <label>Emergency contacts</label>
+          <div class="panel" style="padding:6px 12px" id="contactList">
+            <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="meta"><b>Sophie Tran, RN</b><small>Caregiver · same building · CPR/AED trained</small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>
+            <div class="row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="meta"><b>Claire Brennan</b><small>Daughter · Ottawa</small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></div>
+          </div>
+          <button class="addbtn" onclick="addContact()">+ Add contact</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="saved-toast" id="toast">Saved</div>
+  </div>
+</div>
+
+<div class="controls" id="controls">
+  <button onclick="prev()" title="Previous">‹</button>
+  <button class="primary" id="playBtn" onclick="togglePlay()">▶ Autoplay</button>
+  <button onclick="next()" title="Next">›</button>
+  <span class="lbl" id="stepLbl">Step 1 / 12 · Profile</span>
+  <button onclick="reset()">↺ Reset</button>
+</div>
+<div class="hint" id="hint">Click anywhere on the phone, or press Space, to go to the next step · ← = back · ▶ Autoplay runs it on a timer</div>
+
+<script>
+// ---------- scenario timeline (resident-facing side of Scenario 1) ----------
+// agent: "dormant" | "active" | "alert"   ·   sheet: show profile sheet
+const STEPS = [
+  { clock:"2:10", name:"Profile", mode:"idle", agent:"dormant", agentTxt:"Standby", sheet:false, ping:true,
+    state:"Profile", title:"Matthew Brennan", body:"This is the person Guardian looks after. Tap the picture top-right to open the full profile.",
+    hr:57, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["On track","green"], extra:"" },
+
+  { clock:"2:10", name:"Profile — overview", mode:"idle", agent:"dormant", agentTxt:"Setup", sheet:true, scrollTo:"pfTop",
+    state:"Profile", title:"Your profile", body:"Address and phone live here. Tap any field to edit it, then Save — Guardian uses these the moment something happens.",
+    hr:57, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["On track","green"], extra:"" },
+
+  { clock:"2:10", name:"Profile — conditions", mode:"idle", agent:"dormant", agentTxt:"Setup", sheet:true, scrollTo:"fConditions",
+    state:"Profile", title:"Conditions", body:"Add or remove any with the + and × buttons. Guardian relays these to 911 in an emergency.",
+    hr:57, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["On track","green"], extra:"" },
+
+  { clock:"2:11", name:"Profile — medications", mode:"idle", agent:"dormant", agentTxt:"Setup", sheet:true, scrollTo:"fMeds",
+    state:"Profile", title:"Medications & schedule", body:"Each medication has its dose and dosing times. Add a new one, or remove it with the trash button.",
+    hr:57, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["On track","green"], extra:"" },
+
+  { clock:"2:11", name:"Profile — contacts", mode:"idle", agent:"dormant", agentTxt:"Setup", sheet:true, scrollTo:"fContacts",
+    state:"Profile", title:"Who Guardian calls", body:"These are the people contacted if something goes wrong. Add as many as you like, or remove one with the trash button.",
+    hr:57, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["On track","green"], extra:"" },
+
+  { clock:"2:13", name:"Standby", mode:"idle", agent:"dormant", agentTxt:"Guardian asleep · standby", sheet:false,
+    state:"Standby", title:"Resting quietly.", body:"Nothing needs attention. Guardian is dormant in the background and only wakes if something changes.",
+    hr:56, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["On track","green"], extra:"" },
+
+  { clock:"2:14", name:"Asleep — baseline", mode:"calm", agent:"dormant", agentTxt:"Passive watch", sheet:false,
+    state:"All quiet", title:"Good night, Matthew.", body:"Your heart rhythm is steady and your oxygen is normal. I'm keeping a quiet watch while you sleep.",
+    hr:57, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["On track","green"], extra:"" },
+
+  { clock:"2:39", name:"Waking up", mode:"calm", agent:"active", agentTxt:"Guardian awake · light check", sheet:false,
+    state:"You're stirring", title:"You're up, Matthew.", body:"I noticed you've woken and moved. Just checking in — everything still looks fine. Take your time.",
+    hr:78, hrHot:false, spo2:97, spo2Note:"Normal range", dayTag:["Awake","blue"], extra:"" },
+
+  { clock:"2:41", name:"Irregular rhythm", mode:"warn", agent:"active", agentTxt:"Guardian active · watching heart", sheet:false,
+    state:"Checking your heart", title:"Your rhythm just changed.", body:"As you sat up, your watch picked up a fast, irregular heartbeat. I'm watching it closely now.",
+    hr:142, hrHot:true, spo2:95, spo2Note:"Slightly low", dayTag:["Watching","red"], extra:"" },
+
+  { clock:"2:41", name:"Heart rate climbing", mode:"warn", agent:"active", agentTxt:"Guardian active · assessing", sheet:false,
+    state:"Watching closely", title:"Still irregular and fast.", body:"This isn't settling. I'm pulling up your heart history so I'm ready if you need help.",
+    hr:138, hrHot:true, spo2:94, spo2Note:"Low", dayTag:["Watching","red"], extra:"" },
+
+  { clock:"2:42", name:"Fall + confirm window", mode:"alert", agent:"alert", agentTxt:"Possible emergency", sheet:false,
+    state:"Possible fall", title:"Matthew, did you fall?", body:"Your watch detected a fall and you're not moving. Tap a button so I know you're okay.",
+    hr:135, hrHot:true, spo2:91, spo2Note:"Low — monitoring", dayTag:["Urgent","red"],
+    extra:`<div class="confirm-row"><button class="btn-ok" onclick="answerOk()">I'm OK</button><button class="btn-help">I need help</button></div>
+           <div class="countdown"><svg class="cring" id="cring" viewBox="0 0 36 36"></svg><span id="cdText">Auto-calling help in 8s…</span></div>` },
+
+  { clock:"2:42", name:"Escalating", mode:"alert", agent:"alert", agentTxt:"No response · escalating", sheet:false,
+    state:"Getting you help", title:"No response — getting help now.", body:"I'm treating this as a heart emergency. Pulling up your medical history and the fastest ambulance route.",
+    hr:130, hrHot:true, spo2:90, spo2Note:"Low", dayTag:["Emergency","red"],
+    extra:`<div class="row" style="color:#fff;border:0;padding:4px 0"><span>Recalling cardiac history &amp; contacts…</span></div>` },
+
+  { clock:"2:43", name:"Calling 911", mode:"alert", agent:"alert", agentTxt:"Calling emergency services", sheet:false,
+    state:"Calling 911", title:"Calling 911 now.", body:"Sharing that you're on a blood thinner, have atrial fibrillation and a prior heart attack. Ambulance estimated in about 8 minutes.",
+    hr:128, hrHot:true, spo2:90, spo2Note:"Low", dayTag:["911 calling","red"],
+    extra:`<div class="row" style="color:#fff;border:0;padding:4px 0"><span>Ambulance ETA ≈ 8 min · nearest station 1.4 km</span></div>` },
+
+  { clock:"2:43", name:"Sophie + AED", mode:"alert", agent:"alert", agentTxt:"Mobilizing on-site help", sheet:false,
+    state:"Helper on the way", title:"Sophie is coming to help.", body:"I've called Sophie (RN, same building) and sent her the nearest defibrillator: Wellesley Community Centre lobby, 420 m away.",
+    hr:126, hrHot:true, spo2:91, spo2Note:"Low", dayTag:["Help coming","red"],
+    extra:`<div class="row" style="color:#fff;border:0;padding:4px 0"><span>AED · Wellesley Community Centre · 420 m</span></div>` },
+
+  { clock:"2:44", name:"Help on the way", mode:"warn", agent:"alert", agentTxt:"Monitoring until arrival", sheet:false,
+    state:"Help is on the way", title:"You're not alone, Matthew.", body:"Ambulance is en route and Sophie is almost there with the defibrillator. I've let Claire know and I'm staying with you.",
+    hr:124, hrHot:true, spo2:92, spo2Note:"Monitoring", dayTag:["Monitoring","red"],
+    extra:`<div class="row" style="color:#fff;border:0;padding:4px 0"><span>✓ 911 en route · ✓ Sophie notified · ✓ Claire updated</span></div>` },
+];
+
+let i = 0, playing = false, timer = null, cdTimer = null;
+const $ = id => document.getElementById(id);
+
+function sparkline(el, hot){
+  const pts = [];
+  for(let x=0;x<=120;x+=4){
+    let y = 9 + Math.sin(x/ (hot?3:8)) * (hot?6:2.2) + (hot? (Math.random()*3-1.5):0);
+    pts.push(`${x},${y.toFixed(1)}`);
+  }
+  el.innerHTML = `<polyline points="${pts.join(' ')}" fill="none" stroke="${hot?'oklch(0.577 0.245 27)':'oklch(0.42 0.12 230)'}" stroke-width="1.6"/>`;
+}
+
+function render(){
+  const s = STEPS[i];
+  $("clock").textContent = s.clock;
+  const card = $("statusCard");
+  card.className = "status-card" + (s.mode==="idle"?" idle": s.mode==="warn"?" warn": s.mode==="alert"?" alert":"");
+  $("stState").textContent = s.state;
+  $("stTitle").textContent = s.title;
+  $("stBody").textContent = s.body;
+  $("stExtra").innerHTML = s.extra || "";
+  $("hrVal").textContent = s.hr;
+  $("vHr").classList.toggle("hot", s.hrHot);
+  $("spo2Val").textContent = s.spo2;
+  $("spo2Note").textContent = s.spo2Note;
+  $("vSpo2").classList.toggle("hot", s.spo2 < 93);
+  $("dayTag").textContent = s.dayTag[0];
+  $("dayTag").className = "tag " + s.dayTag[1];
+  sparkline($("hrSpark"), s.hrHot);
+  $("stepLbl").textContent = `Step ${i+1} / ${STEPS.length} · ${s.name}`;
+
+  // agent state pill
+  const pill = $("agentPill");
+  pill.className = "agent-pill" + (s.agent==="active"?" active": s.agent==="alert"?" alert":"");
+  $("agentTxt").textContent = s.agentTxt;
+  // avatar ping on the intro step
+  $("avatar").classList.toggle("ping", !!s.ping);
+  // profile sheet driven by the script
+  $("sheet").classList.toggle("open", !!s.sheet);
+  // guided tour: scroll the open sheet to the highlighted section
+  if(s.sheet){
+    const tgt = s.scrollTo ? $(s.scrollTo) : null;
+    if(tgt) setTimeout(()=>tgt.scrollIntoView({behavior:"smooth",block:"start"}), 120);
+    else { const sb=document.querySelector(".sheet-body"); if(sb) sb.scrollTop=0; }
+  }
+
+  // countdown ring on the fall/confirm step
+  if(cdTimer){clearInterval(cdTimer);cdTimer=null;}
+  if($("cring")) startCountdown();
+}
+
+function startCountdown(){
+  let t = 8; const ring = $("cring");
+  const draw = ()=>{ const frac=t/8; const off=100-(frac*100);
+    ring.innerHTML = `<circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="3.4"/>
+      <circle cx="18" cy="18" r="15.9" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"
+      stroke-dasharray="100" stroke-dashoffset="${off}" transform="rotate(-90 18 18)"/>
+      <text x="18" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">${t}</text>`;
+    if($("cdText")) $("cdText").textContent = t>0?`Auto-calling help in ${t}s…`:`Calling for help…`;
+  };
+  draw();
+  cdTimer = setInterval(()=>{ t--; if(t<0){clearInterval(cdTimer);return;} draw(); }, 1000);
+}
+
+function answerOk(){
+  if(cdTimer)clearInterval(cdTimer);
+  const card=$("statusCard"); card.className="status-card warn";
+  $("stState").textContent="Glad you're okay"; $("stTitle").textContent="Thanks, Matthew.";
+  $("stBody").textContent="I've cancelled the emergency call. I'll keep a close eye on your heart rate for a while and let Sophie know you're alright.";
+  $("stExtra").innerHTML="";
+}
+
+function step(n){ i=Math.max(0,Math.min(STEPS.length-1,n)); render(); }
+function next(){ if(i>=STEPS.length-1){pause();return;} step(i+1); }
+function prev(){ step(i-1); }
+function reset(){ pause(); step(0); }
+function play(){ playing=true; $("playBtn").textContent="❚❚ Pause";
+  timer=setInterval(()=>{ if(i>=STEPS.length-1){pause();return;} next(); }, 3400); }
+function pause(){ playing=false; $("playBtn").textContent="▶ Play"; if(timer)clearInterval(timer); }
+function togglePlay(){ playing?pause():play(); }
+
+function openSheet(){ $("sheet").classList.add("open"); }
+function closeSheet(){ $("sheet").classList.remove("open"); }
+function toast(msg){ const t=$("toast"); t.textContent=msg||"Saved"; t.classList.add("show"); setTimeout(()=>{t.classList.remove("show");t.textContent="Saved";},1300); }
+function saveField(){ toast("Saved"); }
+
+// ---- configurable profile: chips (conditions / meds) ----
+function delChip(btn){ btn.parentNode.remove(); toast("Removed"); }
+function addChip(listId, promptText, flag){
+  const name=prompt(promptText); if(!name)return;
+  const c=document.createElement("span");
+  c.className="chip"+(flag?" flag":"");
+  c.appendChild(document.createTextNode(name));
+  const x=document.createElement("button"); x.className="x"; x.textContent="×";
+  x.onclick=function(){ delChip(x); };
+  c.appendChild(x);
+  $(listId).appendChild(c);
+  toast("Added");
+}
+
+// ---- configurable profile: rows (contacts / documents) ----
+function delRow(btn){ btn.closest(".row").remove(); toast("Deleted"); }
+function addContact(){
+  const name=prompt("Contact name"); if(!name)return;
+  const note=prompt("Relationship or note")||"";
+  const row=document.createElement("div"); row.className="row";
+  row.innerHTML=`<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="meta"><b></b><small></small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`;
+  row.querySelector("b").textContent=name;
+  row.querySelector("small").textContent=note;
+  $("contactList").appendChild(row);
+  toast("Contact added");
+}
+
+function addMed(){
+  const name=prompt("Medication name"); if(!name)return;
+  const dose=prompt("Dose (e.g. 5 mg)")||"";
+  const sched=prompt("Schedule (e.g. 8:00 AM & 8:00 PM)")||"";
+  const sub=[dose,sched].filter(Boolean).join(" · ");
+  const row=document.createElement("div"); row.className="row";
+  row.innerHTML=`<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg></span><span class="meta"><b></b><small></small></span><button class="del" onclick="delRow(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`;
+  row.querySelector("b").textContent=name;
+  row.querySelector("small").textContent=sub;
+  $("medList").appendChild(row);
+  toast("Medication added");
+}
+
+// ---- click anywhere on the phone screen → next step (real buttons still do their thing) ----
+document.querySelector(".screen").addEventListener("click", e=>{
+  if(e.target.closest("button, input, textarea, select, a, .avatar")) return;
+  if(playing) pause();
+  next();
+});
+
+// ---- Space = next step · ← = back · → = forward ----
+document.addEventListener("keydown", e=>{
+  if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if(e.code==="Space"){ e.preventDefault(); if(playing) pause(); next(); }
+  if(e.code==="ArrowRight") next();
+  if(e.code==="ArrowLeft") prev();
+});
+render();
+</script>
+</body>
+</html>

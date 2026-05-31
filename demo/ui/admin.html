@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guardian — Admin Console (Matthew)</title>
+<style>
+  /* ---- tokens mirrored from frontend/src/app/globals.css ---- */
+  :root{
+    --background: oklch(0.985 0.004 240);
+    --foreground: oklch(0.18 0.02 250);
+    --card: oklch(1 0.002 240);
+    --muted: oklch(0.955 0.008 240);
+    --muted-foreground: oklch(0.52 0.02 250);
+    --primary: oklch(0.42 0.12 230);
+    --border: oklch(0.91 0.012 240);
+    --destructive: oklch(0.577 0.245 27.325);
+    --ok: oklch(0.62 0.13 150);
+    --warn: oklch(0.74 0.15 75);
+    --sidebar: oklch(0.21 0.02 255);
+    --sidebar-fg: oklch(0.97 0.005 240);
+    --sidebar-accent: oklch(0.32 0.04 255);
+    --chart-1: oklch(0.55 0.18 25);
+    --chart-2: oklch(0.5 0.12 230);
+    --chart-3: oklch(0.55 0.13 150);
+    --radius: 12px;
+    --font: ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono: ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--font);color:var(--foreground);background:var(--background);display:flex;overflow:hidden}
+
+  /* ---- sidebar ---- */
+  .sidebar{width:224px;flex:0 0 auto;background:var(--sidebar);color:var(--sidebar-fg);
+    display:flex;flex-direction:column;gap:22px;padding:22px 14px}
+  .sidebar .brand{padding:4px 8px}
+  .sidebar .brand b{font-size:17px;font-weight:700}
+  .sidebar .brand small{display:block;font-size:11.5px;color:oklch(0.7 0.02 250);margin-top:2px}
+  .nav{display:flex;flex-direction:column;gap:3px;flex:1}
+  .nav a{display:flex;align-items:center;gap:10px;border-radius:9px;padding:9px 12px;font-size:13.5px;font-weight:600;
+    color:oklch(0.78 0.02 250);cursor:pointer;transition:.15s;text-decoration:none}
+  .nav a svg{width:16px;height:16px;opacity:.85}
+  .nav a:hover{background:oklch(0.3 0.03 255);color:#fff}
+  .nav a.active{background:var(--sidebar-accent);color:#fff}
+  .pingbtn{border:0;border-radius:10px;padding:11px;background:oklch(0.45 0.13 230);color:#fff;font-weight:700;font-size:13px;
+    cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px}
+  .pingbtn svg{width:15px;height:15px}
+  .pingbtn:hover{background:oklch(0.5 0.13 230)}
+
+  /* ---- main ---- */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+  .header{height:56px;flex:0 0 auto;border-bottom:1px solid var(--border);background:oklch(1 0.002 240 / .7);backdrop-filter:blur(8px);
+    display:flex;align-items:center;justify-content:flex-end;gap:16px;padding:0 26px}
+  .header .who{font-size:13px;color:var(--muted-foreground);font-weight:600}
+  .header .who b{color:var(--foreground)}
+  .header .clock{font-family:var(--mono);font-size:13px;color:var(--muted-foreground)}
+  .health-pill{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:oklch(0.9 0.06 150);color:oklch(0.4 0.12 150)}
+  .health-pill .pd{width:7px;height:7px;border-radius:50%;background:oklch(0.5 0.13 150);animation:bp 2s infinite}
+  .header .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,oklch(0.78 0.07 230),oklch(0.6 0.1 250));color:#fff;font-weight:700;display:grid;place-items:center;font-size:13px;cursor:pointer;border:2px solid transparent;transition:.15s;position:relative;overflow:hidden}
+  .header .av:hover{border-color:oklch(0.55 0.1 230 / .55);box-shadow:0 0 0 3px oklch(0.42 0.12 230 / .12)}
+  .header .av svg{width:20px;height:20px}
+
+  .page{flex:1;overflow:auto;padding:26px 30px}
+  .page[hidden]{display:none}
+  .ptitle{font-size:22px;font-weight:700;letter-spacing:-0.01em}
+  .psub{color:var(--muted-foreground);font-size:13.5px;margin-top:3px}
+  .phead{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px}
+
+  /* ---- card ---- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .card h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .card h3 .u{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--muted-foreground)}
+  .card .desc{font-size:12.5px;color:var(--muted-foreground);margin-top:4px}
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+
+  /* ---- tier banner ---- */
+  .tier{border:1px solid var(--border);border-radius:14px;padding:14px 18px;transition:.4s;margin-bottom:18px}
+  .tier.t-whisper{background:oklch(0.98 0.02 230);border-color:oklch(0.85 0.06 230)}
+  .tier.t-warn{background:oklch(0.97 0.04 80);border-color:oklch(0.8 0.12 80)}
+  .tier.t-alert{background:oklch(0.97 0.04 25);border-color:oklch(0.78 0.16 27)}
+  .tier .tl{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground)}
+  .tier .tv{font-size:20px;font-weight:800;margin-top:3px;display:flex;align-items:center;gap:10px}
+  .tier.t-whisper .tv{color:var(--primary)} .tier.t-warn .tv{color:oklch(0.5 0.13 70)} .tier.t-alert .tv{color:var(--destructive)}
+  .tier .tsub{font-size:13px;color:var(--muted-foreground);margin-top:3px}
+  .tbadge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--muted);color:var(--muted-foreground)}
+  .tier.t-whisper .tbadge{background:oklch(0.9 0.05 230);color:var(--primary)}
+  .tier.t-warn .tbadge{background:oklch(0.88 0.1 80);color:oklch(0.45 0.13 70)}
+  .tier.t-alert .tbadge{background:oklch(0.9 0.09 25);color:var(--destructive)}
+
+  /* ---- stat tiles ---- */
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:15px 16px;transition:.3s}
+  .stat.hot{border-color:oklch(0.7 0.18 27);box-shadow:0 0 0 3px oklch(0.7 0.2 27 / .1)}
+  .stat .sh{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted-foreground);font-weight:650}
+  .stat .sh svg{width:15px;height:15px}
+  .stat .sv{font-size:24px;font-weight:780;margin-top:7px;display:flex;align-items:baseline;gap:5px}
+  .stat .sv u{font-size:12px;font-weight:600;color:var(--muted-foreground);text-decoration:none}
+  .stat.hot .sv{color:var(--destructive)}
+  .stat .ssub{font-size:11.5px;color:var(--muted-foreground);font-weight:600;margin-top:2px}
+  .stat .chart{margin-top:8px;width:100%;height:48px}
+
+  /* ---- nav cards ---- */
+  .navcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;cursor:pointer;transition:.2s}
+  .navcard:hover{border-color:oklch(0.6 0.05 250);transform:translateY(-1px)}
+  .navcard b{font-size:15px;font-weight:700}
+  .navcard p{font-size:12.5px;color:var(--muted-foreground);margin-top:5px;line-height:1.45}
+
+  /* ---- flow graph (kept from console) ---- */
+  .graph{position:relative;height:360px;display:flex;align-items:stretch;border:1px solid var(--border);border-radius:14px;overflow:hidden;
+    background:var(--card);background-image:radial-gradient(oklch(0.87 0.012 240) 1px, transparent 1px);background-size:18px 18px}
+  .edges{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+  .edges .flow{stroke-dasharray:6 6;animation:dashmove .9s linear infinite}
+  @keyframes dashmove{to{stroke-dashoffset:-12}}
+  .gcol{flex:1;position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;padding:30px 6px 12px}
+  .gcol.specialists,.gcol.tools{justify-content:space-evenly;gap:0}
+  .ghead{position:absolute;top:9px;left:0;right:0;text-align:center;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted-foreground)}
+  .gnode{position:relative;z-index:2;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:10px 15px;
+    font-size:13px;font-weight:700;text-align:center;color:var(--foreground);transition:.35s;opacity:.36;white-space:nowrap}
+  .gnode.lit{opacity:1}
+  .gnode.tool{font-family:var(--mono);font-size:11.5px;font-weight:600;padding:8px 13px;color:var(--muted-foreground);opacity:.5}
+  .gnode.tool.avail{opacity:1;color:var(--foreground)}
+  .gnode.tool.fired{opacity:1;font-weight:700}
+
+  /* ---- live layout: vitals on the left, graph + voice on the right ---- */
+  .livewrap{display:flex;gap:16px;align-items:stretch}
+  .vitalsCol{width:250px;flex:0 0 auto;display:flex;flex-direction:column;gap:12px;justify-content:space-between}
+  .liveMain{flex:1;min-width:0;display:flex;flex-direction:column}
+  .vtile{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 15px;transition:.35s}
+  .vtile.hot{border-color:oklch(0.7 0.18 27);box-shadow:0 0 0 3px oklch(0.7 0.2 27 / .1)}
+  .vtile .vh{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted-foreground);font-weight:650}
+  .vtile .vh svg{width:14px;height:14px}
+  .vtile .vv{font-size:22px;font-weight:780;margin-top:6px;display:flex;align-items:baseline;gap:5px}
+  .vtile .vv u{font-size:11px;font-weight:600;color:var(--muted-foreground);text-decoration:none}
+  .vtile.hot .vv{color:var(--destructive)}
+  .vtile .vn{font-size:11px;color:var(--muted-foreground);font-weight:600;margin-top:3px}
+  .vtile .spark{height:22px;width:100%;margin-top:4px}
+
+  /* ---- voice ---- */
+  .voice{display:flex;align-items:center;gap:11px;border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin-top:14px;background:var(--card);transition:.35s;opacity:.6}
+  .voice.speaking{opacity:1;border-color:var(--primary);background:oklch(0.98 0.014 230)}
+  .voice .vi{width:30px;height:30px;border-radius:9px;background:var(--muted);display:grid;place-items:center;flex:0 0 auto}
+  .voice .vi svg{width:16px;height:16px;color:var(--muted-foreground)} .voice.speaking .vi{background:oklch(0.92 0.05 230)} .voice.speaking .vi svg{color:var(--primary)}
+  .voice .vl{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground);display:flex;align-items:center;gap:8px}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:12px}
+  .bars i{width:3px;height:4px;border-radius:2px;background:var(--muted-foreground)}
+  .voice.speaking .bars i{background:var(--primary);animation:eq .9s infinite ease-in-out}
+  .voice.speaking .bars i:nth-child(2){animation-delay:.15s}.voice.speaking .bars i:nth-child(3){animation-delay:.3s}
+  .voice.speaking .bars i:nth-child(4){animation-delay:.45s}.voice.speaking .bars i:nth-child(5){animation-delay:.6s}
+  @keyframes eq{0%,100%{height:4px}50%{height:12px}}
+  .voice .vt{font-size:13px;line-height:1.4;margin-top:2px} .voice:not(.speaking) .vt{color:var(--muted-foreground)}
+
+  /* ---- event log table ---- */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-foreground);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  td.time{font-family:var(--mono);font-size:11.5px;color:var(--muted-foreground);white-space:nowrap}
+  .kind{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--muted);color:var(--muted-foreground)}
+  .kind.warn{background:oklch(0.9 0.09 80);color:oklch(0.45 0.13 70)}
+  .kind.alert{background:oklch(0.92 0.07 25);color:var(--destructive)}
+  .kind.tool{background:oklch(0.9 0.06 150);color:oklch(0.4 0.12 150)}
+
+  /* ---- reminders list ---- */
+  .rlist{list-style:none}
+  .rlist li{display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--border)}
+  .rlist li:last-child{border-bottom:0}
+  .rlist .rname{font-weight:650;font-size:14px}
+  .rlist .rmeta{font-size:12px;color:var(--muted-foreground);margin-top:2px}
+  .rlist .rtime{font-family:var(--mono);font-size:12px;color:var(--muted-foreground);margin-left:auto}
+  .badge-ok{font-size:11px;font-weight:700;padding:4px 11px;border-radius:999px;background:oklch(0.9 0.06 150);color:oklch(0.4 0.12 150)}
+  .btn{border:1px solid var(--border);background:var(--card);border-radius:9px;padding:6px 13px;font-size:12.5px;font-weight:650;cursor:pointer;font-family:inherit;color:var(--foreground)}
+  .btn:hover{background:var(--muted)}
+  .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+  /* ---- profile editor ---- */
+  .field{margin-bottom:16px}
+  .field>label{display:block;font-size:12px;font-weight:700;color:var(--muted-foreground);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+  .inp{width:100%;border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;font-family:inherit;background:var(--background);color:var(--foreground)}
+  .inp:focus{outline:2px solid oklch(0.55 0.1 230 / .35);border-color:var(--primary)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .row3{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:10px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--muted);color:var(--foreground)}
+  .chip.flag{background:oklch(0.92 0.07 25);color:oklch(0.5 0.2 25)}
+  .chip .x{border:0;background:transparent;color:inherit;opacity:.5;cursor:pointer;font-size:14px;font-weight:700;line-height:1;font-family:inherit}
+  .chip .x:hover{opacity:1}
+  .erow{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
+  .erow:first-child{border-top:0}
+  .erow .ei{width:30px;height:30px;border-radius:9px;background:var(--muted);display:grid;place-items:center;flex:0 0 auto}
+  .erow .ei svg{width:15px;height:15px;color:var(--primary)}
+  .erow .em{flex:1;min-width:0}
+  .erow .em b{font-weight:650;font-size:13.5px}
+  .erow .em small{display:block;color:var(--muted-foreground);font-size:12px}
+  .del{border:0;background:transparent;cursor:pointer;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto;color:var(--muted-foreground)}
+  .del:hover{background:oklch(0.92 0.07 25);color:var(--destructive)} .del svg{width:15px;height:15px}
+  .addbtn{margin-top:10px;border:1px dashed var(--border);background:var(--card);color:var(--primary);border-radius:10px;padding:8px 14px;font-weight:650;font-size:13px;cursor:pointer;font-family:inherit}
+  .addbtn:hover{background:oklch(0.97 0.012 230);border-color:var(--primary)}
+  .save-row{display:flex;gap:10px;margin-top:8px}
+  .conn{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:oklch(0.9 0.06 150);color:oklch(0.4 0.12 150);display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+  .conn::before{content:"";width:6px;height:6px;border-radius:50%;background:oklch(0.5 0.13 150);animation:bp 2s infinite}
+
+  @keyframes bp{0%{box-shadow:0 0 0 0 oklch(0.62 0.13 150 / .5)}70%{box-shadow:0 0 0 6px oklch(0.62 0.13 150 / 0)}100%{box-shadow:0 0 0 0 transparent}}
+
+  /* ---- playback controls ---- */
+  .controls{display:flex;align-items:center;gap:10px;margin-top:16px}
+  .controls button{border:1px solid var(--border);background:var(--card);border-radius:9px;padding:8px 13px;cursor:pointer;font-weight:650;font-size:13px;font-family:inherit;color:var(--foreground)}
+  .controls button.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .controls .lbl{font-size:12.5px;color:var(--muted-foreground);font-weight:600}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--foreground);color:var(--background);padding:9px 16px;border-radius:999px;font-size:12.5px;font-weight:600;opacity:0;transition:.25s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ================= SIDEBAR ================= -->
+<aside class="sidebar">
+  <div class="brand"><b>Guardian</b><small>Home Emergency Companion</small></div>
+  <nav class="nav" id="nav">
+    <a data-page="overview" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Overview</a>
+    <a data-page="live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg> Live</a>
+    <a data-page="vitals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l2 5 4-10 2 5h6"/></svg> Vitals</a>
+    <a data-page="reminders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Reminders</a>
+    <a data-page="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Profile</a>
+  </nav>
+  <button class="pingbtn" onclick="toast('Ping sent to Matthew’s watch')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12a10 10 0 0 1 20 0M6 12a6 6 0 0 1 12 0"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg> Ping device</button>
+</aside>
+
+<!-- ================= MAIN ================= -->
+<div class="main">
+  <div class="header">
+    <span class="health-pill"><span class="pd"></span> Device online</span>
+    <span class="who">Patient: <b>Matthew Brennan</b> · 78</span>
+    <span class="clock" id="clock">02:10:00</span>
+    <span class="av" id="headerAv" title="Open Matthew's profile" onclick="showPage('profile')">MB</span>
+  </div>
+
+  <!-- ---------- OVERVIEW ---------- -->
+  <section class="page" data-page="overview">
+    <div class="phead"><div><div class="ptitle">Overview</div><div class="psub">Home Emergency AI Companion — always-on, fully local.</div></div></div>
+
+    <div class="tier t-whisper">
+      <div class="tl">Risk classifier · current severity</div>
+      <div class="tv">Tier 1</div>
+      <div class="tsub">All channels within baseline. Guardian is keeping a passive watch — no agent engaged.</div>
+    </div>
+
+    <div class="grid g4" style="margin-bottom:18px">
+      <div class="stat"><div class="sh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l2 5 4-10 2 5h6"/></svg> Heart rate</div><div class="sv"><span id="ovHr">57</span><u>bpm</u></div><div class="ssub">resting · sinus</div><svg class="chart" id="ovSpark" viewBox="0 0 120 22" preserveAspectRatio="none"></svg></div>
+      <div class="stat"><div class="sh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2s6 6 6 11a6 6 0 0 1-12 0c0-5 6-11 6-11Z"/></svg> Blood oxygen</div><div class="sv">97<u>%</u></div><div class="ssub">normal range</div></div>
+      <div class="stat"><div class="sh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M12 7v6l-3 5M12 13l3 5"/></svg> Last fall check</div><div class="sv" style="font-size:18px">Clear</div><div class="ssub">no impact detected</div></div>
+      <div class="stat"><div class="sh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/></svg> Meds today</div><div class="sv">3<u>/ 4 taken</u></div><div class="ssub">Atorvastatin at 9:00 PM</div></div>
+    </div>
+
+  </section>
+
+  <!-- ---------- LIVE ---------- -->
+  <section class="page" data-page="live" hidden>
+    <div class="phead">
+      <div><div class="ptitle">Live</div><div class="psub">Routing pipeline, agent activity, and event stream.</div></div>
+      <span class="health-pill" id="liveStatus"><span class="pd"></span> Live</span>
+    </div>
+
+    <div class="tier t-whisper" id="liveTier">
+      <div class="tl">Risk classifier · severity tier</div>
+      <div class="tv"><span id="tierName">Tier 1</span></div>
+      <div class="tsub" id="tierSub">All channels within baseline. Passive watch — no agent engaged.</div>
+    </div>
+
+    <div class="livewrap">
+      <aside class="vitalsCol" id="liveVitals">
+        <div class="vtile" id="vtHr">
+          <div class="vh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l2 5 4-10 2 5h6"/></svg> Heart rate</div>
+          <div class="vv"><span id="lvHr">57</span><u>bpm</u></div>
+          <svg class="spark" id="lvSpark" viewBox="0 0 120 22" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="vtile" id="vtSpo2">
+          <div class="vh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2s6 6 6 11a6 6 0 0 1-12 0c0-5 6-11 6-11Z"/></svg> Blood oxygen</div>
+          <div class="vv"><span id="lvSpo2">97</span><u>% SpO₂</u></div>
+          <div class="vn" id="lvSpo2n">normal range</div>
+        </div>
+        <div class="vtile" id="vtRhythm">
+          <div class="vh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h3l2-7 3 14 2-7h3l2 4h3"/></svg> Heart rhythm</div>
+          <div class="vv" style="font-size:16px"><span id="lvRhythm">Sinus</span></div>
+        </div>
+        <div class="vtile" id="vtFall">
+          <div class="vh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M12 7v6l-3 5M12 13l3 5"/></svg> Motion / fall</div>
+          <div class="vv" style="font-size:16px"><span id="lvFall">Resting</span></div>
+        </div>
+        <div class="vtile" id="vtTemp">
+          <div class="vh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V4a2 2 0 1 0-4 0v10.76a4 4 0 1 0 4 0Z"/></svg> Skin temp</div>
+          <div class="vv"><span id="lvTemp">36.6</span><u>°C</u></div>
+        </div>
+      </aside>
+
+      <div class="liveMain">
+        <div class="graph" id="graph">
+          <svg class="edges" id="edges" preserveAspectRatio="none"></svg>
+          <div class="gcol input"><div class="ghead">Input</div><div class="gnode" id="nInput">Patient input</div></div>
+          <div class="gcol router"><div class="ghead">Router</div><div class="gnode" id="nRouter">Guardian router</div></div>
+          <div class="gcol specialists"><div class="ghead">Specialists</div>
+            <div class="gnode" data-agent="safety">Safety</div>
+            <div class="gnode" data-agent="health">Health</div>
+            <div class="gnode" data-agent="reminder">Reminder</div>
+            <div class="gnode" data-agent="companion">Companion</div>
+            <div class="gnode" data-agent="behavior">Behavior</div>
+            <div class="gnode" data-agent="caregiver">Caregiver&nbsp;liaison</div>
+          </div>
+          <div class="gcol tools" id="toolCol"><div class="ghead">Tools (parallel)</div></div>
+        </div>
+
+        <div class="voice" id="voice">
+          <span class="vi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg></span>
+          <div style="flex:1;min-width:0">
+            <div class="vl">Speaking <span class="bars"><i></i><i></i><i></i><i></i><i></i></span></div>
+            <div class="vt" id="voiceText">— listening</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- playback kept in DOM but hidden: drive with Space / click / arrows -->
+    <div class="controls" style="display:none">
+      <button id="playBtn" onclick="togglePlay()">play</button>
+      <span class="lbl" id="stepLbl"></span>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h3>Event stream</h3>
+      <table style="margin-top:8px"><thead><tr><th style="width:110px">Time</th><th style="width:120px">Kind</th><th>Summary</th></tr></thead>
+      <tbody id="logBody"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ---------- VITALS ---------- -->
+  <section class="page" data-page="vitals" hidden>
+    <div class="phead"><div><div class="ptitle">Vitals</div><div class="psub">Trends from Matthew's Apple Watch over the last hour.</div></div></div>
+    <div class="grid g3" id="vitalsGrid"></div>
+  </section>
+
+  <!-- ---------- REMINDERS ---------- -->
+  <section class="page" data-page="reminders" hidden>
+    <div class="phead"><div><div class="ptitle">Reminders</div><div class="psub">Today's medications and check-ins.</div></div></div>
+    <div class="card" style="max-width:640px">
+      <h3>Today's schedule</h3>
+      <ul class="rlist" id="remList"></ul>
+    </div>
+  </section>
+
+  <!-- ---------- PROFILE ---------- -->
+  <section class="page" data-page="profile" hidden>
+    <div class="phead"><div><div class="ptitle">Profile</div><div class="psub">This is the configuration surface — edit here, the watch stays simple.</div></div></div>
+
+    <div class="grid g2" style="align-items:start">
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Patient information</h3>
+        <div style="margin-top:14px">
+          <div class="row2"><div class="field"><label>Full name</label><input class="inp" value="Matthew Brennan"></div><div class="field"><label>Age</label><input class="inp" value="78"></div></div>
+          <div class="field"><label>Home address</label><input class="inp" value="200 Wellesley St E, Apt 1407, Toronto"></div>
+          <div class="row2"><div class="field"><label>Phone</label><input class="inp" value="(416) 555-0190"></div>
+            <div class="field"><label>Primary language</label>
+              <select class="inp"><option>English</option><option>Spanish</option><option>French</option><option>Chinese (Mandarin)</option><option>Arabic</option><option>Portuguese</option></select>
+            </div></div>
+          <div class="field"><label>Notes for responders</label><textarea class="inp" rows="2">Lives alone. Pacemaker — no. On anticoagulant; bleeding risk.</textarea></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg> Conditions & allergies</h3>
+        <div class="field" style="margin-top:14px"><label>Conditions</label>
+          <div class="chips" id="condChips">
+            <span class="chip flag">Atrial fibrillation<button class="x" onclick="delChip(this)">×</button></span>
+            <span class="chip flag">Prior heart attack<button class="x" onclick="delChip(this)">×</button></span>
+            <span class="chip">Heart failure (mild)<button class="x" onclick="delChip(this)">×</button></span>
+            <span class="chip">Type 2 diabetes<button class="x" onclick="delChip(this)">×</button></span>
+          </div>
+          <button class="addbtn" onclick="addChip('condChips','Add a condition',true)">+ Add condition</button>
+        </div>
+        <div class="field"><label>Allergies</label>
+          <div class="chips" id="algChips">
+            <span class="chip">Penicillin<button class="x" onclick="delChip(this)">×</button></span>
+            <span class="chip">Sulfa drugs<button class="x" onclick="delChip(this)">×</button></span>
+          </div>
+          <button class="addbtn" onclick="addChip('algChips','Add an allergy',false)">+ Add allergy</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg> Medications & schedule</h3>
+        <div id="medList" style="margin-top:10px"></div>
+        <button class="addbtn" onclick="addMed()">+ Add medication</button>
+      </div>
+
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg> Emergency contacts</h3>
+        <div id="contactList" style="margin-top:10px"></div>
+        <button class="addbtn" onclick="addContact()">+ Add contact</button>
+      </div>
+
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg> Documents &amp; lab results</h3>
+        <div class="desc">Uploaded here, available to the Safety agent in an emergency. PDF, image, or report.</div>
+        <div id="docList" style="margin-top:10px"></div>
+        <button class="addbtn" onclick="addDoc()">+ Upload file</button>
+      </div>
+
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg> Connected data sources</h3>
+        <div class="desc">Already loaded for this device — Guardian's tools query these directly. No setup needed.</div>
+        <div id="dbList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="save-row"><button class="btn primary" onclick="toast('Profile saved')">Save changes</button><button class="btn" onclick="toast('Reverted')">Reset</button></div>
+  </section>
+</div>
+
+<div class="toast" id="toast">Saved</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+/* ---------------- navigation ---------------- */
+function showPage(name){
+  $$(".page").forEach(p=>p.hidden = p.dataset.page!==name);
+  $$("#nav a").forEach(a=>a.classList.toggle("active", a.dataset.page===name));
+  if(name==="live") requestAnimationFrame(renderScn);
+}
+$("#nav").addEventListener("click", e=>{ const a=e.target.closest("a"); if(a){ showPage(a.dataset.page); } });
+$$(".navcard").forEach(c=>c.addEventListener("click", ()=>showPage(c.dataset.go)));
+
+/* ---------------- toast ---------------- */
+let tT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg||"Saved"; t.classList.add("show"); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove("show"),1400); }
+
+/* ---------------- profile editing ---------------- */
+function delChip(b){ b.parentNode.remove(); toast("Removed"); }
+function addChip(listId, promptText, flag){
+  const name=prompt(promptText); if(!name)return;
+  const c=document.createElement("span"); c.className="chip"+(flag?" flag":"");
+  c.appendChild(document.createTextNode(name));
+  const x=document.createElement("button"); x.className="x"; x.textContent="×"; x.onclick=()=>delChip(x);
+  c.appendChild(x); $("#"+listId).appendChild(c); toast("Added");
+}
+function delRow(b){ b.closest(".erow").remove(); toast("Deleted"); }
+
+const TRASH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>`;
+const PILL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m10.5 20.5 10-10a5 5 0 0 0-7-7l-10 10a5 5 0 0 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>`;
+const USER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`;
+
+const MEDS = [
+  ["Apixaban","5 mg · 8:00 AM & 8:00 PM · with food"],
+  ["Metoprolol","50 mg · 8:00 AM & 8:00 PM"],
+  ["Furosemide","40 mg · 8:00 AM"],
+  ["Atorvastatin","20 mg · 9:00 PM"],
+];
+const CONTACTS = [
+  ["Sophie Tran, RN","Caregiver · same building · CPR/AED trained · priority 1"],
+  ["Claire Brennan","Daughter · Ottawa · priority 2"],
+];
+function erow(icon,name,meta){
+  const d=document.createElement("div"); d.className="erow";
+  d.innerHTML=`<span class="ei">${icon}</span><span class="em"><b></b><small></small></span><button class="del" onclick="delRow(this)">${TRASH}</button>`;
+  d.querySelector("b").textContent=name; d.querySelector("small").textContent=meta; return d;
+}
+function addMed(){
+  const name=prompt("Medication name"); if(!name)return;
+  const dose=prompt("Dose (e.g. 5 mg)")||""; const sched=prompt("Schedule (e.g. 8:00 AM & 8:00 PM)")||"";
+  $("#medList").appendChild(erow(PILL,name,[dose,sched].filter(Boolean).join(" · "))); toast("Medication added");
+}
+function addContact(){
+  const name=prompt("Contact name"); if(!name)return;
+  const note=prompt("Relationship / note")||""; $("#contactList").appendChild(erow(USER,name,note)); toast("Contact added");
+}
+MEDS.forEach(m=>$("#medList").appendChild(erow(PILL,m[0],m[1])));
+CONTACTS.forEach(c=>$("#contactList").appendChild(erow(USER,c[0],c[1])));
+
+/* ---------------- documents & lab results ---------------- */
+const DOC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>`;
+const DOCS = [
+  ["ECG report — 12-lead","PDF · 412 KB · Toronto General · 2026-04-18"],
+  ["Bloodwork — INR / coagulation panel","PDF · 88 KB · 2026-05-09"],
+  ["Cardiology discharge summary","PDF · 1.1 MB · prior MI, 2025"],
+  ["Medication list (signed)","PDF · 64 KB · pharmacy, 2026-05-01"],
+];
+DOCS.forEach(d=>$("#docList").appendChild(erow(DOC,d[0],d[1])));
+function addDoc(){
+  const name=prompt("File name (e.g. Echocardiogram report)"); if(!name)return;
+  const meta=prompt("Type / note (e.g. PDF · 2026-05-30)")||"PDF · uploaded just now";
+  $("#docList").appendChild(erow(DOC,name,meta)); toast("File uploaded");
+}
+
+/* ---------------- connected data sources (already loaded) ---------------- */
+const DB = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>`;
+const DBS = [
+  ["Patient profile & history","local · this device — conditions, meds, contacts"],
+  ["Watch vitals stream","live · HR, SpO₂, accelerometer, skin temp, sleep, steps"],
+  ["Toronto Heat Relief Network","City Open Data (CKAN) — cooling centres & cool spaces"],
+  ["AED / defibrillator registry","public locations — used by find_nearest_aed"],
+  ["EMS dispatch & routing","911 dispatch + travel-time estimate for ambulance ETA"],
+];
+DBS.forEach(d=>{
+  const row=document.createElement("div"); row.className="erow";
+  row.innerHTML=`<span class="ei">${DB}</span><span class="em"><b></b><small></small></span><span class="conn">Connected</span>`;
+  row.querySelector("b").textContent=d[0]; row.querySelector("small").textContent=d[1];
+  $("#dbList").appendChild(row);
+});
+
+/* ---------------- vitals charts ---------------- */
+function areaChart(series, color, hot){
+  const w=260,h=48, n=series.length, max=Math.max(...series), min=Math.min(...series), rng=(max-min)||1;
+  const pts=series.map((v,idx)=>`${(idx/(n-1)*w).toFixed(1)},${(h-4-((v-min)/rng)*(h-10)).toFixed(1)}`);
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="0,${h} ${pts.join(' ')} ${w},${h}" fill="${color}" opacity="0.10"/>
+    <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="2"/></svg>`;
+}
+const VITALS = [
+  {t:"Heart rate",u:"bpm",v:"57",sub:"resting",c:"var(--chart-1)",d:[58,57,56,57,59,57,56,57,58,57,56,57]},
+  {t:"Blood oxygen",u:"% SpO₂",v:"97",sub:"normal",c:"var(--chart-2)",d:[97,97,96,97,98,97,97,96,97,97,97,97]},
+  {t:"Blood pressure",u:"mmHg",v:"128/78",sub:"in range",c:"var(--chart-3)",d:[126,128,127,130,129,127,128,131,128,126,129,128]},
+  {t:"Skin temp",u:"°C",v:"36.6",sub:"nominal",c:"var(--chart-3)",d:[36.5,36.6,36.6,36.5,36.7,36.6,36.6,36.5,36.6,36.6,36.7,36.6]},
+  {t:"Sleep",u:"tonight",v:"5h 12m",sub:"deep + REM",c:"var(--chart-2)",d:[1,2,3,2,3,2,1,2,3,2,1,1]},
+  {t:"Steps",u:"today",v:"2,240",sub:"vs 3,000 goal",c:"var(--chart-1)",d:[0,200,500,900,1200,1500,1700,1900,2000,2100,2200,2240]},
+];
+$("#vitalsGrid").innerHTML = VITALS.map((m,i)=>`
+  <div class="card"><h3>${m.t}<span class="u">${m.u}</span></h3>
+    <div class="stat" style="border:0;padding:0;margin-top:6px"><div class="sv" id="vval${i}">${m.v}</div><div class="ssub">${m.sub}</div></div>
+    <div id="vslot${i}">${areaChart(m.d, m.c, false)}</div></div>`).join("");
+const vSeries = VITALS.map(m=>m.d.slice());
+function pushPoint(i, base, amp){
+  const arr=vSeries[i]; arr.shift(); arr.push(+(base+(Math.random()*2-1)*amp).toFixed(1));
+  $("#vslot"+i).innerHTML = areaChart(arr, VITALS[i].c, false);
+}
+
+/* ---------------- reminders ---------------- */
+const REM = [
+  ["Apixaban","5 mg · with food","8:00 AM",true],
+  ["Metoprolol","50 mg","8:00 AM",true],
+  ["Furosemide","40 mg","8:00 AM",true],
+  ["Apixaban","5 mg · with food","8:00 PM",true],
+  ["Metoprolol","50 mg","8:00 PM",true],
+  ["Atorvastatin","20 mg","9:00 PM",false],
+];
+$("#remList").innerHTML = REM.map((r,idx)=>`
+  <li><div><div class="rname">${r[0]} <span style="color:var(--muted-foreground);font-weight:500">${r[1]}</span></div></div>
+    <span class="rtime">${r[2]}</span>
+    ${r[3] ? `<span class="badge-ok">Confirmed</span>` : `<button class="btn primary" onclick="this.outerHTML='<span class=\\'badge-ok\\'>Confirmed</span>';toast('Marked as taken')">Confirm</button>`}
+  </li>`).join("");
+
+/* ================= LIVE SCENARIO (tier + graph + voice + log) ================= */
+const AGENTS=["safety","health","reminder","companion","behavior","caregiver"];
+const AGENT_TOOLS={
+  safety:["recall_history","estimate_ems_eta","find_nearest_aed","call_person","notify_caregiver","call_911"],
+  health:["recall_history","get_schedule","mark_med_taken"], reminder:["get_schedule","mark_med_taken","send_reminder"],
+  companion:["recall_history","find_cool_space","send_reminder"], behavior:["recall_history","get_schedule"], caregiver:["recall_history","notify_caregiver"],
+};
+const AGENT_ACCENT={safety:"oklch(0.577 0.245 27)",health:"oklch(0.52 0.13 150)",reminder:"oklch(0.5 0.13 250)",companion:"oklch(0.5 0.18 300)",behavior:"oklch(0.58 0.13 80)",caregiver:"oklch(0.52 0.1 200)"};
+const EDGE_GREY="oklch(0.84 0.012 240)";
+
+const SCN=[
+  {clock:"02:10:00",name:"Profile loaded",tier:["Tier 1","tier_1_whisper","t-whisper"],sub:"System idle. Patient profile loaded, no live event.",agent:null,invoked:{},say:"",log:["t","02:10:00","loaded persona: Matthew (AFib, prior MI, on apixaban)"]},
+  {clock:"02:13:00",name:"Standby",tier:["Tier 1","tier_1_whisper","t-whisper"],sub:"All channels within baseline. No agent engaged.",agent:null,invoked:{},say:"",log:["t","02:13:00","vitals ingest hr=56 spo2=97 rhythm=sinus"]},
+  {clock:"02:14:00",name:"Asleep — baseline",tier:["Tier 1","tier_1_whisper","t-whisper"],sub:"Resting. Score 0.04 → tier 1 (idle watch).",agent:null,invoked:{},say:"",log:["t","02:14:00","vitals ingest hr=57 spo2=97 · stable"]},
+  {clock:"02:39:10",name:"Waking up",tier:["Tier 1","tier_1_whisper","t-whisper"],sub:"Movement + mild hr rise on waking. Classifier notes, no agent.",agent:null,invoked:{},say:"",log:["t","02:39:10","motion event · hr 57→78 (waking)"]},
+  {clock:"02:41:10",name:"Irregular rhythm",tier:["Tier 2","tier_2_nudge","t-warn"],sub:"Fast, irregular rhythm. Classifier escalates to watching. Still no agent.",agent:null,invoked:{},say:"",log:["warn","02:41:10","VitalUpdate hr=142 rhythm=afib → tier_2_nudge"]},
+  {clock:"02:41:40",name:"Rhythm persists",tier:["Tier 2","tier_2_nudge","t-warn"],sub:"Anomaly not settling. Classifier holds tier 2, still observing.",agent:null,invoked:{},say:"",log:["warn","02:41:40","rhythm sustained · spo2 97→94"]},
+  {clock:"02:42:03",name:"Fall → route to Safety",tier:["Tier 4","tier_4_call","t-alert"],sub:"Fall + abnormal rhythm → tier_4_call (cardiac). Router engages Safety only.",agent:"safety",invoked:{},say:"Matthew, I detected a fall and your heart rhythm looks off. Are you okay? Say “I'm okay” if you're fine.",log:["alert","02:42:03","FallDetected impact=high → Router.route() → safety"]},
+  {clock:"02:42:12",name:"Escalating — recall",tier:["Tier 4","tier_4_call","t-alert"],sub:"No response. Safety pulls medical context before acting.",agent:"safety",invoked:{recall_history:"fired"},say:"Okay — I'm getting you help now. Stay as still as you can, I'm right here with you.",log:["tool","02:42:13","recall_history() → AFib, prior MI, apixaban, caregiver Sophie RN"]},
+  {clock:"02:43:01",name:"Calling 911",tier:["Tier 4","tier_4_call","t-alert"],sub:"Safety computes ETA, then dials EMS with the vector-informed summary.",agent:"safety",invoked:{recall_history:"fired",estimate_ems_eta:"fired",call_911:"run"},say:"I'm calling 911 now — telling them you're on a blood thinner and your heart's in an abnormal rhythm.",log:["tool","02:43:02","call_911() dispatch · ETA ~8 min · station 1.4 km"]},
+  {clock:"02:43:20",name:"AED + Sophie",tier:["Tier 4","tier_4_call","t-alert"],sub:"Possible cardiac arrest → find nearest AED and send the RN to bridge the gap.",agent:"safety",invoked:{recall_history:"fired",estimate_ems_eta:"fired",call_911:"fired",find_nearest_aed:"run",notify_caregiver:"run"},say:"Sophie is on her way up with a defibrillator and she's close. Keep breathing slowly — you're doing fine.",log:["tool","02:43:21","find_nearest_aed() → Wellesley CC lobby 420 m · notify_caregiver(Sophie)"]},
+  {clock:"02:44:05",name:"Monitor until arrival",tier:["Tier 4","tier_4_call","t-alert"],sub:"EMS en route · Sophie arriving with AED. Safety holds and keeps watch.",agent:"safety",invoked:{recall_history:"fired",estimate_ems_eta:"fired",call_911:"fired",find_nearest_aed:"fired",notify_caregiver:"fired"},say:"Help is almost here. Sophie's coming and the ambulance is minutes away. I've let Claire know. You're not alone.",log:["t","02:44:06","status: EMS en route · Sophie arriving · family update → Claire"]},
+  {clock:"02:48:00",name:"Resolved — handed off",tier:["Tier 1","tier_1_whisper","t-whisper"],sub:"Patient with EMS. Guardian returns to passive watch.",agent:null,invoked:{},say:"",log:["t","02:48:00","EMS on scene · Safety agent released · back to tier 1"]},
+];
+
+// per-step watch sensors (left column) — progresses with the scenario
+const SENS=[
+  {hr:57, spo2:97, rhythm:"Sinus",            motion:"Resting",        temp:"36.6"},
+  {hr:56, spo2:97, rhythm:"Sinus",            motion:"Resting",        temp:"36.6"},
+  {hr:57, spo2:97, rhythm:"Sinus",            motion:"Asleep",         temp:"36.5"},
+  {hr:78, spo2:97, rhythm:"Sinus",            motion:"Moving (waking)",temp:"36.6"},
+  {hr:142,spo2:95, rhythm:"Irregular · AFib", motion:"Sitting up",     temp:"36.7"},
+  {hr:138,spo2:94, rhythm:"Irregular · AFib", motion:"Unsteady",       temp:"36.7"},
+  {hr:135,spo2:91, rhythm:"Irregular · AFib", motion:"Fall detected",  temp:"36.6"},
+  {hr:130,spo2:90, rhythm:"Irregular · AFib", motion:"No movement",    temp:"36.5"},
+  {hr:128,spo2:90, rhythm:"Irregular · AFib", motion:"No movement",    temp:"36.4"},
+  {hr:126,spo2:91, rhythm:"Irregular · AFib", motion:"Faint movement", temp:"36.4"},
+  {hr:124,spo2:92, rhythm:"Irregular",        motion:"Faint movement", temp:"36.5"},
+  {hr:72, spo2:96, rhythm:"Sinus (recovering)",motion:"With EMS",      temp:"36.6"},
+];
+let sparkPhase=0;
+function sparkline(el, hot){
+  const pts=[]; for(let x=0;x<=120;x+=4){ let y=11+Math.sin((x+sparkPhase)/(hot?3:8))*(hot?7:2.4)+(hot?(Math.random()*3-1.5):0); pts.push(`${x},${y.toFixed(1)}`);}
+  el.innerHTML=`<polyline points="${pts.join(' ')}" fill="none" stroke="${hot?'oklch(0.577 0.245 27)':'oklch(0.42 0.12 230)'}" stroke-width="1.8"/>`;
+}
+function renderVitals(){
+  const v=SENS[si];
+  const hrHot=v.hr>110; $("#lvHr").textContent=v.hr; $("#vtHr").classList.toggle("hot",hrHot); sparkline($("#lvSpark"),hrHot);
+  const o2Hot=v.spo2<93; $("#lvSpo2").textContent=v.spo2; $("#vtSpo2").classList.toggle("hot",o2Hot); $("#lvSpo2n").textContent=o2Hot?"low — monitoring":"normal range";
+  $("#lvRhythm").textContent=v.rhythm; $("#vtRhythm").classList.toggle("hot",/irreg|fib/i.test(v.rhythm));
+  $("#lvFall").textContent=v.motion; $("#vtFall").classList.toggle("hot",/fall|no movement/i.test(v.motion));
+  $("#lvTemp").textContent=v.temp;
+}
+
+let si=0, scnPlaying=false, scnTimer=null;
+
+function nodeBox(el){ const g=$("#graph").getBoundingClientRect(), r=el.getBoundingClientRect(); return {l:r.left-g.left,r:r.right-g.left,cy:(r.top+r.bottom)/2-g.top}; }
+function edgePath(x1,y1,x2,y2,color,strong,flow){ const mx=(x1+x2)/2;
+  return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${color}" stroke-width="${strong?2.6:1.4}" stroke-linecap="round"${flow?' class="flow"':''}/>`; }
+
+function drawGraph(s){
+  const accent = s.agent ? AGENT_ACCENT[s.agent] : null;
+  const soft = accent ? accent.replace(")"," / .14)") : null;
+  const col=$("#toolCol"); col.querySelectorAll(".gnode").forEach(n=>n.remove());
+  (s.agent?AGENT_TOOLS[s.agent]:[]).forEach(t=>{
+    const d=document.createElement("div"); d.className="gnode tool"; d.dataset.tool=t; d.textContent=t;
+    const inv=s.invoked[t];
+    if(inv){ d.classList.add("fired"); d.style.borderColor=accent; d.style.color=accent; d.style.boxShadow=`0 0 0 3px ${soft}`; }
+    else d.classList.add("avail");
+    col.appendChild(d);
+  });
+  $("#nInput").classList.add("lit"); $("#nRouter").classList.add("lit");
+  $("#nInput").style.borderColor=accent||""; $("#nRouter").style.borderColor=accent||"";
+  AGENTS.forEach(a=>{ const el=$(`.gnode[data-agent="${a}"]`); const on=s.agent===a;
+    el.classList.toggle("lit",on); el.style.borderColor=on?accent:""; el.style.boxShadow=on?`0 0 0 3px ${soft}`:""; });
+
+  const g=$("#graph"), svg=$("#edges"); svg.setAttribute("viewBox",`0 0 ${g.clientWidth} ${g.clientHeight}`);
+  const inp=nodeBox($("#nInput")), rt=nodeBox($("#nRouter")); let p="";
+  p+=edgePath(inp.r,inp.cy,rt.l,rt.cy,accent||EDGE_GREY,!!s.agent,false);
+  AGENTS.forEach(a=>{ const b=nodeBox($(`.gnode[data-agent="${a}"]`)); const on=s.agent===a; p+=edgePath(rt.r,rt.cy,b.l,b.cy,on?accent:EDGE_GREY,on,false); });
+  if(s.agent){ const ab=nodeBox($(`.gnode[data-agent="${s.agent}"]`));
+    col.querySelectorAll(".gnode").forEach(el=>{ const b=nodeBox(el); const inv=s.invoked[el.dataset.tool]; p+=edgePath(ab.r,ab.cy,b.l,b.cy,inv?accent:EDGE_GREY,!!inv,!!inv); }); }
+  svg.innerHTML=p;
+}
+
+function renderScn(){
+  const s=SCN[si];
+  $("#clock").textContent=s.clock;
+  $("#stepLbl").textContent=`Step ${si+1} / ${SCN.length} · ${s.name}`;
+  const tw=$("#liveTier"); tw.className="tier "+s.tier[2];
+  $("#tierName").textContent=s.tier[0]; $("#tierSub").textContent=s.sub;
+  renderVitals();
+  drawGraph(s);
+  const say=s.say||""; $("#voice").classList.toggle("speaking",!!say); $("#voiceText").textContent=say||"— listening";
+  // cumulative event log
+  let rows="";
+  for(let k=0;k<=si;k++){ const [cls,t,msg]=SCN[k].log; rows+=`<tr><td class="time">${t}</td><td><span class="kind ${cls!=='t'?cls:''}">${cls==='t'?'status':cls}</span></td><td>${msg}</td></tr>`; }
+  $("#logBody").innerHTML=rows;
+}
+function stepTo(n){ si=Math.max(0,Math.min(SCN.length-1,n)); renderScn(); }
+function next(){ if(si>=SCN.length-1){pauseScn();return;} stepTo(si+1); }
+function prev(){ stepTo(si-1); }
+function resetScn(){ pauseScn(); stepTo(0); }
+function playScn(){ scnPlaying=true; $("#playBtn").textContent="❚❚ Pause"; scnTimer=setInterval(()=>{ if(si>=SCN.length-1){pauseScn();return;} next(); },3400); }
+function pauseScn(){ scnPlaying=false; $("#playBtn").textContent="▶ Play scenario"; if(scnTimer)clearInterval(scnTimer); }
+function togglePlay(){ scnPlaying?pauseScn():playScn(); }
+
+let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(!$('.page[data-page="live"]').hidden) renderScn(); },120); });
+window.addEventListener("load", ()=>{ if(!$('.page[data-page="live"]').hidden) renderScn(); });
+
+/* ---------------- live heartbeat: vitals keep moving every second on every page ---------------- */
+const vis = name => !$(`.page[data-page="${name}"]`).hidden;
+setInterval(()=>{
+  sparkPhase=(sparkPhase+7)%100000;   // scroll the traces
+
+  // LIVE — full scenario vitals (HR moves, fast & jagged when abnormal)
+  if(vis("live")){
+    const v=SENS[si], hot=v.hr>110;
+    sparkline($("#lvSpark"), hot);
+    $("#lvHr").textContent = v.hr + (hot?Math.round(Math.random()*6-3):Math.round(Math.random()*2-1));
+  }
+
+  // OVERVIEW — resting HR ticking along
+  if(vis("overview")){
+    sparkline($("#ovSpark"), false);
+    $("#ovHr").textContent = 57 + Math.round(Math.random()*2-1);
+  }
+
+  // VITALS — HR scrolls a lot, BP nudges slightly, SpO₂ left steady
+  if(vis("vitals")){
+    pushPoint(0, 57, 3);
+    $("#vval0").textContent = 57 + Math.round(Math.random()*3-1);
+    if(Math.random()<0.55){
+      pushPoint(2, 128, 2);
+      $("#vval2").textContent = (128+Math.round(Math.random()*3-1))+"/"+(78+Math.round(Math.random()*2-1));
+    }
+  }
+}, 1000);
+
+/* ---------------- Live page: Space starts/pauses the scenario · click advances ---------------- */
+document.addEventListener("keydown", e=>{
+  if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if($('.page[data-page="live"]').hidden) return;   // keys only act on the Live page
+  if(e.code==="Space"){ e.preventDefault(); togglePlay(); }
+  if(e.code==="ArrowRight") next();
+  if(e.code==="ArrowLeft") prev();
+});
+
+// ---- click anywhere on the Live page → next step (real buttons still do their thing) ----
+$('.page[data-page="live"]').addEventListener("click", e=>{
+  if(e.target.closest("button, input, textarea, select, a")) return;
+  if(scnPlaying) pauseScn();
+  next();
+});
+</script>
+</body>
+</html>
