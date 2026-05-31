@@ -192,6 +192,19 @@ def test_upload_endpoint_end_to_end(tmp_path, monkeypatch):
         ),
     )
 
+    # The upload path also runs an LLM profile-extraction pass. Stub it so the
+    # test stays hermetic (no network / model) and deterministic. The dedicated
+    # extraction logic is unit-tested separately in test_medical_history_extract.
+    from backend.api.schemas import MedicalHistoryExtraction
+
+    monkeypatch.setattr(
+        lab_records,
+        "extract_and_apply_profile",
+        lambda *a, **k: MedicalHistoryExtraction(
+            applied=True, conditions_added=["Anemia"]
+        ),
+    )
+
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -224,6 +237,9 @@ def test_upload_endpoint_end_to_end(tmp_path, monkeypatch):
         assert body["observations"] == 1
         assert body["status"] == "parsed"
         assert body["duplicate"] is False
+        # LLM-extracted profile fields are surfaced on the upload result.
+        assert body["profile"]["applied"] is True
+        assert body["profile"]["conditions_added"] == ["Anemia"]
 
         # Re-upload identical bytes -> deduped, same report.
         again = client.post(
