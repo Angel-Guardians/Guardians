@@ -1,9 +1,122 @@
-# Optional services. Guardian runs on SQLite with no Docker; bring this up only
-# for the pgvector RAG upgrade:  docker compose up -d postgres
+# Guardian full stack on the DGX Spark (GB10 / "GX10"). One GPU, 128 GB unified.
+#
+#   docker compose up -d --build                  -> trtllm + backend + frontend
+#   docker compose up -d --build --no-deps backend frontend
+#                                                 -> app only (LLM already running)
+#   docker compose --profile rag up -d postgres   -> optional pgvector RAG store
+#   docker compose run --rm backend pytest        -> test suite
+#
+# Exposure: frontend (:3000) and backend (:8080) publish on 0.0.0.0, so they're
+# reachable on every host interface — the GX10's WiFi LAN IP AND its Tailscale IP.
+# The frontend's API URL is baked at BUILD time (NEXT_PUBLIC_*), so it must be an
+# address the OTHER machine (where the browser runs) can reach. Default is the
+# GX10's Tailscale IP (http://100.103.166.16:8080), reachable from anywhere on the
+# tailnet; override NEXT_PUBLIC_API_BASE_URL for a LAN-only or custom deployment.
 services:
+  # --- LLM: Nemotron Nano (NVFP4) on TensorRT-LLM, OpenAI-compatible :8000 ----
+  # Mirrors the working `guardian-trtllm` container: host networking, full GPU,
+  # the tuned AutoDeploy config (nano_v3_gb10.yaml), and the HF cache so the
+  # ~16 GB model isn't re-downloaded. NOTE: if you already started trtllm by hand
+  # with the same name, stop it first (docker rm -f guardian-trtllm) or bring the
+  # app up with --no-deps to leave the running one untouched.
+  trtllm:
+    image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc15
+    container_name: guardian-trtllm
+    restart: unless-stopped
+    network_mode: host          # binds host :8000 (matches your manual launch)
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      # Model is already in the HF cache; token only matters for a fresh pull.
+      HF_TOKEN: ${HF_TOKEN:-}
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+      PYTORCH_ALLOC_CONF: garbage_collection_threshold:0.99999
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - ${HOME}/nano_v3_gb10.yaml:/workspace/nano_v3.yaml:ro
+    command: >
+      trtllm-serve serve
+      --host 0.0.0.0 --port 8000
+      --backend _autodeploy
+      --trust_remote_code
+      --reasoning_parser nano-v3
+      --tool_parser qwen3_coder
+      --extra_llm_api_options /workspace/nano_v3.yaml
+      nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 40               # model load is slow; give it generous room
+      start_period: 600s
+
+  # --- Backend API (FastAPI + LangGraph) -------------------------------------
+  backend:
+    build:
+      # Repo root so the image bundles backend + scripts + scenarios + tests.
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: guardian-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8000
+      # Pin the SQLite DB into the mounted volume (below) so it survives recreate.
+      # 4 slashes = absolute path; this overrides the relative DATABASE_URL in .env,
+      # which stays portable for host / non-Docker runs.
+      DATABASE_URL: sqlite:////app/data/guardian.db
+    # trtllm uses host networking, so reach it from this bridge container via
+    # host.docker.internal (mapped to the docker bridge gateway). .env sets
+    # LLM_BASE_URL=http://host.docker.internal:8000/v1 to match.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8000"             # LAN: http://10.10.52.255:8080
+    volumes:
+      - guardian-data:/app/data
+    depends_on:
+      - trtllm
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # --- Frontend (Next.js) ----------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle at BUILD time; the browser on the OTHER
+        # machine calls this, so it must be an address that machine can reach.
+        # Default = this GX10 node's Tailscale IP (works from any tailnet device,
+        # across networks). Override NEXT_PUBLIC_API_BASE_URL for LAN/other.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://100.103.166.16:8080}
+    container_name: guardian-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"             # Tailscale: http://100.103.166.16:3000
+    depends_on:
+      - backend
+
+  # --- Postgres + pgvector (optional, RAG upgrade only) ----------------------
   postgres:
-    image: pgvector/pgvector:pg17     # Postgres 17 with the pgvector extension preinstalled
+    image: pgvector/pgvector:pg17
     container_name: guardian-postgres
+    profiles: ["rag"]
     environment:
       POSTGRES_USER: guardian
       POSTGRES_PASSWORD: guardian
@@ -18,5 +131,15 @@ services:
       timeout: 5s
       retries: 5
 
+  # ===========================================================================
+  # VOICE (add later) — each model is its OWN service on its OWN port, talking
+  # OpenAI-style to the backend. When you enable these, LOWER the trtllm KV-cache
+  # slice (kv_cache_config.free_gpu_memory_fraction in nano_v3_gb10.yaml, now
+  # 0.88) so STT/TTS get a share of the 128 GB unified pool. Verify with nvidia-smi.
+  #   stt:  Parakeet (NeMo/Riva) or faster-whisper, e.g. :9000
+  #   tts:  Kokoro (FastAPI-wrapped), e.g. :8880
+  # ===========================================================================
+
 volumes:
   guardian-pgdata:
+  guardian-data:
