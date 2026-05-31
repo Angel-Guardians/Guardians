@@ -49,9 +49,9 @@ class ToolRegistry:
 
 def build_default_registry() -> ToolRegistry:
     """Register every stub. Imported lazily to avoid circulars."""
-    from backend.tools import civic, emergency, health, memory, reminder
+    from backend.tools import civic, emergency, general_tools, health, memory, reminder
 
     registry = ToolRegistry()
-    for module in (emergency, health, reminder, civic, memory):
+    for module in (emergency, general_tools, health, reminder, civic, memory):
         module.register(registry)
     return registry

@@ -82,14 +82,18 @@ class GuardianAgent:
         self._graph = build_guardian_graph(self.route, self._agents)
 
     @trace(name="guardian-router")
-    def route(self, message: str) -> str:
+    def route(self, message: str, history: list[Message] | None = None) -> str:
         lowered = message.lower()
         if any(kw in lowered for kw in _SAFETY_KEYWORDS):
             return "safety"
 
+        # Include the last 4 messages (2 turns) so the router can classify
+        # short replies like "yes" or "maybe" in context.
+        context = (history or [])[-4:]
         response = self._llm.chat(
             [
                 Message(role="system", content=_ROUTER_PROMPT),
+                *context,
                 Message(role="user", content=message),
             ],
             max_tokens=8,
@@ -111,9 +115,9 @@ class GuardianAgent:
         (see backend/tools/*). The API layer turns this dict into bus events so the
         Live page shows which specialist ran and which tools fired.
         """
-        from backend.tools import emergency, health, reminder
+        from backend.tools import emergency, general_tools, health, reminder
 
-        logs = (emergency.CALL_LOG, health.CALL_LOG, reminder.CALL_LOG)
+        logs = (emergency.CALL_LOG, general_tools.CALL_LOG, health.CALL_LOG, reminder.CALL_LOG)
         for log in logs:
             log.clear()
 
