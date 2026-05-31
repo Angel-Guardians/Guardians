@@ -120,6 +120,9 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     /** Hands-free voice: when on, the watch listens and streams when speech is detected. */
     fun setVoiceEnabled(on: Boolean) = voice.setEnabled(on)
 
+    /** Clear the current voice conversation (transcript/reply/error) and re-arm. */
+    fun resetVoice() = voice.reset()
+
     override fun onCleared() {
         voice.shutdown()
         super.onCleared()

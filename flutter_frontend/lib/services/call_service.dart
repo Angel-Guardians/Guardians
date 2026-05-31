@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -77,6 +78,7 @@ class CallTarget {
 class CallService {
   static const MethodChannel _channel = MethodChannel('guardian/telephony');
   final FlutterTts _tts = FlutterTts();
+  final AudioPlayer _player = AudioPlayer();
   bool _ttsReady = false;
 
   bool get _isAndroid => !kIsWeb && Platform.isAndroid;
@@ -169,17 +171,41 @@ class CallService {
     }
   }
 
+  /// Play a remote audio file (the server's Kokoro WAV) through the speaker.
+  Future<bool> playUrl(String url, {bool speakerphone = true}) async {
+    if (url.isEmpty) return false;
+    if (speakerphone && _isAndroid) {
+      try {
+        await _channel.invokeMethod('setSpeakerphone', {'on': true});
+      } catch (_) {}
+    }
+    try {
+      await _player.stop();
+      await _player.play(UrlSource(url));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> stopSpeaking() async {
     try {
       await _tts.stop();
     } catch (_) {}
+    try {
+      await _player.stop();
+    } catch (_) {}
   }
 
   /// The headline feature: verify we're on a phone with a SIM, dial [number],
-  /// wait for it to connect, then speak [message] over the speaker.
+  /// wait for it to connect, then play the voice over the speaker.
+  ///
+  /// If [audioUrl] is given (the server's Kokoro WAV) we play that; otherwise we
+  /// fall back to on-device TTS of [message].
   Future<CallOutcome> callWithVoice({
     required String number,
     required String message,
+    String? audioUrl,
     Duration connectDelay = const Duration(seconds: 6),
   }) async {
     final st = await status();
@@ -188,9 +214,16 @@ class CallService {
       return CallOutcome(placed: false, reason: st.reason);
     }
     final placed = await placeCall(number);
-    // Give the network a moment to connect before we start speaking.
+    // Give the network a moment to connect before we start the voice.
     await Future.delayed(connectDelay);
-    final spoke = await speak(message, speakerphone: true);
+    bool spoke;
+    if (audioUrl != null && audioUrl.isNotEmpty) {
+      spoke = await playUrl(audioUrl, speakerphone: true);
+      // Fall back to local TTS if the server audio couldn't play.
+      if (!spoke) spoke = await speak(message, speakerphone: true);
+    } else {
+      spoke = await speak(message, speakerphone: true);
+    }
     return CallOutcome(placed: placed, spoke: spoke);
   }
 

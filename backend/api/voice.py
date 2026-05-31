@@ -35,6 +35,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from loguru import logger
 
+from backend.api.call_bridge import emit_call_requests
 from backend.events.types import AgentReplyEvent, TranscriptEvent
 from backend.voice import TTS_SAMPLE_RATE, synthesize_pcm, transcribe_pcm, voice_for_route
 
@@ -70,7 +71,9 @@ async def _stream_tts(websocket: WebSocket, text: str, voice: str) -> None:
     await producer  # surface any exception raised inside the generator
 
 
-async def _handle_utterance(websocket: WebSocket, pcm: bytes, sample_rate: int, ctx) -> None:
+async def _handle_utterance(
+    websocket: WebSocket, pcm: bytes, sample_rate: int, ctx, patient_id: int = 1
+) -> None:
     """Transcribe one utterance, run a turn, and speak the reply back."""
     guardian = ctx.guardian
     bus = ctx.bus
@@ -100,6 +103,10 @@ async def _handle_utterance(websocket: WebSocket, pcm: bytes, sample_rate: int, 
     if bus is not None:
         await bus.publish(AgentReplyEvent(source=f"agent.{route}", agent=route, text=reply))
 
+    # 2b) If the turn placed a call, push a call_request (number + Kokoro audio)
+    # to any connected phone so it dials and plays the announcement.
+    await emit_call_requests(bus, result, patient_id)
+
     # 3) Text -> speech, streamed back as it renders.
     if reply.strip():
         await websocket.send_json({"type": "tts_begin", "sample_rate": TTS_SAMPLE_RATE})
@@ -123,6 +130,7 @@ async def voice_ws(websocket: WebSocket) -> None:
 
     buffer = bytearray()
     sample_rate = 16_000
+    patient_id = 1
     capturing = False
 
     try:
@@ -159,6 +167,7 @@ async def voice_ws(websocket: WebSocket) -> None:
                 buffer.clear()
                 capturing = True
                 sample_rate = int(control.get("sample_rate", 16_000))
+                patient_id = int(control.get("patient_id", patient_id))
                 if ctx.monitor is not None:
                     ctx.monitor.broadcast_event(
                         {"type": "mic_begin", "sample_rate": sample_rate}
@@ -172,7 +181,7 @@ async def voice_ws(websocket: WebSocket) -> None:
                 if ctx.monitor is not None:
                     ctx.monitor.broadcast_event({"type": "mic_end"})
                 try:
-                    await _handle_utterance(websocket, pcm, sample_rate, ctx)
+                    await _handle_utterance(websocket, pcm, sample_rate, ctx, patient_id)
                 except Exception as exc:  # noqa: BLE001 — one bad turn shouldn't kill the socket
                     logger.exception("voice turn failed")
                     await websocket.send_json({"type": "error", "message": str(exc)})

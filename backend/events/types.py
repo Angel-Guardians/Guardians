@@ -167,3 +167,27 @@ class PipelineStepEvent(GuardianEvent):
     node_id: str
     status: str  # "active" | "done" | "error"
     detail: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Call-bridge events (emitted when the agent wants a phone call placed)
+# ---------------------------------------------------------------------------
+
+
+class CallRequestEvent(GuardianEvent):
+    """The agent invoked a call tool (call_911 / notify_caregiver / call_person).
+
+    A connected client (the Flutter app on a phone with a SIM) listens for this
+    on the SSE stream, dials `phone`, and — once the call connects — plays the
+    Kokoro-rendered announcement at `audio_url`. `message` is the same text in
+    case the client wants to fall back to its own TTS.
+    """
+
+    type: Literal["call_request"] = "call_request"
+    tool: str  # "call_911" | "notify_caregiver" | "call_person"
+    phone: str  # number to dial ("911" for emergency services)
+    contact_name: str | None = None
+    message: str = ""  # what to say to the callee
+    audio_url: str = ""  # "/audio/calls/<id>.wav" (Kokoro), relative to API base
+    route: str = "safety"
+    patient_id: int | None = None

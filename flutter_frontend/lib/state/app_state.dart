@@ -5,6 +5,7 @@ import '../config.dart';
 import '../models/models.dart';
 import '../services/api_client.dart';
 import '../services/call_service.dart';
+import '../services/event_stream.dart';
 
 /// Global app state: backend URL, active patient, patient list, and the
 /// currently loaded profile. Screens read this via Provider and call its
@@ -18,6 +19,9 @@ class AppState extends ChangeNotifier {
 
   /// Places real phone calls via the SIM and speaks alerts aloud.
   final CallService callService = CallService();
+
+  /// Live event stream from the backend (used for server-pushed call requests).
+  late final EventStreamService eventStream = EventStreamService(() => _baseUrl);
 
   String _baseUrl = AppConfig.defaultBaseUrl;
   String get baseUrl => _baseUrl;
@@ -60,6 +64,7 @@ class AppState extends ChangeNotifier {
     );
     _initializing = false;
     notifyListeners();
+    eventStream.start(); // self-reconnects; survives backend coming up later
     await refreshAll();
   }
 
@@ -74,6 +79,7 @@ class AppState extends ChangeNotifier {
     _baseUrl = url.trim();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(AppConfig.prefBaseUrl, _baseUrl);
+    eventStream.reconnect(); // re-point the SSE stream at the new URL
     notifyListeners();
     await refreshAll();
   }

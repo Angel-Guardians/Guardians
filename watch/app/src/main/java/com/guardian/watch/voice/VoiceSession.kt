@@ -124,6 +124,24 @@ class VoiceSession(
         _state.value = UiState(phase = Phase.Off)
     }
 
+    /**
+     * Clear the current conversation (transcript / reply / error) and start
+     * fresh. If voice is on we abandon any in-flight turn and re-arm listening;
+     * if it's off we just wipe the displayed state.
+     */
+    fun reset() {
+        watchdog?.cancel()
+        stopPlayback()
+        if (enabled) {
+            client.close() // drop any half-open turn; next speech reconnects
+            vad.reset()
+            preRoll.clear()
+            _state.value = UiState(phase = Phase.Listening)
+        } else {
+            _state.value = UiState(phase = Phase.Off)
+        }
+    }
+
     fun shutdown() {
         recorder.stop()
         stopPlayback()

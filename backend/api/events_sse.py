@@ -29,6 +29,9 @@ def _summarise(ev: GuardianEvent) -> str:
         return f'routed to {d.get("routed_to")} ({d.get("rationale") or "—"})'
     if t == "tool_invocation":
         return f'{d.get("tool")}() -> {json.dumps(d.get("result_summary") or {})[:120]}'
+    if t == "call_request":
+        who = d.get("contact_name") or d.get("phone")
+        return f'call {who} ({d.get("phone")})'
     if t == "vital_sample":
         return f'{d.get("kind")} = {d.get("value")} ({d.get("device")})'
     return t

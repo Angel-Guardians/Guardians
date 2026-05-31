@@ -12,6 +12,7 @@ Future<CallOutcome?> showEmergencyCallSheet(
   required String number,
   String? name,
   required String message,
+  String? audioUrl,
   bool emergency = false,
 }) {
   return showModalBottomSheet<CallOutcome>(
@@ -22,6 +23,7 @@ Future<CallOutcome?> showEmergencyCallSheet(
       number: number,
       name: name,
       message: message,
+      audioUrl: audioUrl,
       emergency: emergency,
     ),
   );
@@ -32,12 +34,14 @@ class _CallSheet extends StatefulWidget {
     required this.number,
     required this.name,
     required this.message,
+    required this.audioUrl,
     required this.emergency,
   });
 
   final String number;
   final String? name;
   final String message;
+  final String? audioUrl;
   final bool emergency;
 
   @override
@@ -67,6 +71,7 @@ class _CallSheetState extends State<_CallSheet> {
     final outcome = await _svc.callWithVoice(
       number: widget.number,
       message: widget.message,
+      audioUrl: widget.audioUrl,
     );
     if (!mounted) return;
     setState(() {
@@ -146,7 +151,10 @@ class _CallSheetState extends State<_CallSheet> {
                     Icon(Icons.record_voice_over_rounded,
                         size: 16, color: theme.colorScheme.onSurfaceVariant),
                     const SizedBox(width: 6),
-                    Text('Spoken aloud when answered',
+                    Text(
+                        widget.audioUrl != null && widget.audioUrl!.isNotEmpty
+                            ? 'Guardian voice played when answered'
+                            : 'Spoken aloud when answered',
                         style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             color: theme.colorScheme.onSurfaceVariant)),

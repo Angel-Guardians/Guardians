@@ -36,6 +36,7 @@ fun MainScreen(
     onToggleMonitoring: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
     onTestFall: () -> Unit,
+    onReset: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val listState = rememberScalingLazyListState()
@@ -52,6 +53,16 @@ fun MainScreen(
             item { Text(text = "Guardian", style = MaterialTheme.typography.title3) }
 
             item { VoiceToggle(voice = voice, onEnabledChange = onVoiceEnabledChange) }
+
+            item {
+                Chip(
+                    onClick = onReset,
+                    label = { Text("Reset") },
+                    secondaryLabel = { Text("Clear conversation") },
+                    colors = ChipDefaults.secondaryChipColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             item {
                 Metric(

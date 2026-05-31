@@ -35,6 +35,8 @@ dependencies:
   # Emergency calling: runtime CALL_PHONE permission + speak the alert aloud
   permission_handler: ^11.3.1
   flutter_tts: ^4.2.0
+  # Play the server's Kokoro-rendered call announcement (WAV over HTTP)
+  audioplayers: ^6.1.0
 
   # Friendly typography (Inter, close to the web app's Geist)
   google_fonts: ^6.2.1

@@ -21,6 +21,7 @@ import asyncio
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from backend.api.call_bridge import emit_call_requests
 from backend.events.types import (
     AgentReplyEvent,
     RoutingDecisionEvent,
@@ -90,5 +91,9 @@ async def take_turn(body: TurnRequest, request: Request) -> TurnResponse:
     # body.patient_id retargets the agent so the reply is grounded in the
     # profile the UI currently has selected.
     result = await asyncio.to_thread(guardian.turn, body.text, emit, body.patient_id)
+
+    # If the agent decided to place a call, push a call_request (with Kokoro
+    # audio) to any connected phone so it dials + speaks the announcement.
+    await emit_call_requests(bus, result, body.patient_id)
 
     return TurnResponse(**result)
