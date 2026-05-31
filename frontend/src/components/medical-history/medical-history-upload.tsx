@@ -6,6 +6,7 @@ import {
   Loader2,
   RotateCcw,
   Sparkles,
+  Trash2,
   UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
@@ -235,6 +236,7 @@ export function MedicalHistoryUpload() {
 
   const [records, setRecords] = useState<LabReport[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const loadRecords = useCallback(async () => {
     setRecordsLoading(true);
@@ -317,6 +319,30 @@ export function MedicalHistoryUpload() {
       setDetail(full);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load record.");
+    }
+  }
+
+  async function removeRecord(rec: LabReport) {
+    const label = rec.document_filename ?? `Report #${rec.id}`;
+    const ok = window.confirm(
+      `Remove "${label}" from this patient's records? This cannot be undone.`,
+    );
+    if (!ok) return;
+
+    setError(null);
+    setDeletingId(rec.id);
+    try {
+      await api.deleteLabRecord(rec.id);
+      if (detail?.id === rec.id) {
+        setDetail(null);
+        setExtraction(null);
+        setDuplicate(false);
+      }
+      await loadRecords();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to remove document.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -497,14 +523,30 @@ export function MedicalHistoryUpload() {
                     <TableCell className="tabular-nums">{rec.observation_count}</TableCell>
                     <TableCell>{statusBadge(rec.status)}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void openRecord(rec.id)}
-                      >
-                        View
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void openRecord(rec.id)}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={deletingId === rec.id}
+                          aria-label={`Remove ${rec.document_filename ?? `report ${rec.id}`}`}
+                          onClick={() => void removeRecord(rec)}
+                        >
+                          {deletingId === rec.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4 text-destructive" />
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

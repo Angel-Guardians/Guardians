@@ -1,10 +1,11 @@
 """Lab / health-record routes.
 
-POST /lab-records/upload           - upload a results PDF; parse + store doc + rows.
-GET  /lab-records                  - list a patient's reports (with row counts).
-GET  /lab-records/{id}             - one report + its parsed observations.
-GET  /lab-records/{id}/document    - download the original stored PDF.
-POST /lab-records/lifelabs/fetch   - (scaffold) crawl MyCareCompass; 501 for now.
+POST   /lab-records/upload           - upload a results PDF; parse + store doc + rows.
+GET    /lab-records                  - list a patient's reports (with row counts).
+GET    /lab-records/{id}             - one report + its parsed observations.
+DELETE /lab-records/{id}             - remove a report, its rows, and the stored PDF.
+GET    /lab-records/{id}/document    - download the original stored PDF.
+POST   /lab-records/lifelabs/fetch   - (scaffold) crawl MyCareCompass; 501 for now.
 
 LifeLabs has no public patient API, so the upload path is primary; the fetch
 endpoint is wired to the crawler scaffold and returns 501 until implemented.
@@ -15,10 +16,16 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlmodel import Session
 
-from backend.api.schemas import LabReportDetail, LabReportRead, LabUploadResult
+from backend.api.schemas import (
+    LabReportDeleteResult,
+    LabReportDetail,
+    LabReportRead,
+    LabUploadResult,
+)
 from backend.db.session import get_session
 from backend.services.lab_records import (
     LabReportNotFoundError,
+    delete_report,
     get_document,
     get_report_detail,
     ingest_lab_pdf,
@@ -81,6 +88,18 @@ def read_lab_report(
         return get_report_detail(session, report_id)
     except LabReportNotFoundError:
         raise HTTPException(status_code=404, detail="lab report not found") from None
+
+
+@router.delete("/{report_id}", response_model=LabReportDeleteResult)
+def remove_lab_report(
+    report_id: int,
+    session: Session = Depends(get_session),
+) -> LabReportDeleteResult:
+    try:
+        deleted_id = delete_report(session, report_id)
+    except LabReportNotFoundError:
+        raise HTTPException(status_code=404, detail="lab report not found") from None
+    return LabReportDeleteResult(report_id=deleted_id)
 
 
 @router.get("/{report_id}/document")

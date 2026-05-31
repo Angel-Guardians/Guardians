@@ -144,6 +144,44 @@ def test_ingest_stores_document_and_rows(sqlite_session, tmp_path, monkeypatch):
     assert len(rows) == 1 and rows[0].test_name == "Hemoglobin"
 
 
+def test_delete_report_removes_rows_and_file(sqlite_session, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "lab_documents_dir", str(tmp_path))
+    sqlite_session.add(Patient(id=1, name="Eleanor Vance", age=82))
+    sqlite_session.commit()
+    monkeypatch.setattr(
+        lab_records,
+        "parse_lab_pdf",
+        lambda _d: ParsedLabReport(
+            raw_text="Hemoglobin 118 g/L",
+            observations=[ParsedObservation(test_name="Hemoglobin", value_text="118")],
+        ),
+    )
+
+    result = lab_records.ingest_lab_pdf(
+        sqlite_session,
+        patient_id=1,
+        filename="results.pdf",
+        content_type="application/pdf",
+        data=b"%PDF-1.4 delete me",
+    )
+    report = sqlite_session.get(LabReport, result.report_id)
+    assert report is not None and report.document_path
+    assert (tmp_path / report.document_path).exists()
+
+    deleted_id = lab_records.delete_report(sqlite_session, result.report_id)
+    assert deleted_id == result.report_id
+    assert sqlite_session.get(LabReport, result.report_id) is None
+    assert (
+        len(
+            sqlite_session.exec(
+                select(LabObservation).where(LabObservation.report_id == result.report_id)
+            ).all()
+        )
+        == 0
+    )
+    assert not (tmp_path / report.document_path).exists()
+
+
 def test_ingest_is_idempotent_on_identical_file(sqlite_session, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "lab_documents_dir", str(tmp_path))
     sqlite_session.add(Patient(id=1, name="Eleanor Vance", age=82))
@@ -263,6 +301,13 @@ def test_upload_endpoint_end_to_end(tmp_path, monkeypatch):
         doc = client.get(f"/lab-records/{report_id}/document")
         assert doc.status_code == 200
         assert doc.content == pdf_bytes
+
+        removed = client.delete(f"/lab-records/{report_id}")
+        assert removed.status_code == 200
+        assert removed.json() == {"report_id": report_id, "deleted": True}
+        assert client.get(f"/lab-records/{report_id}").status_code == 404
+        assert client.get(f"/lab-records/{report_id}/document").status_code == 404
+        assert client.get("/lab-records", params={"patient_id": 1}).json() == []
 
         # Non-PDF is rejected; unknown report 404s.
         bad = client.post(

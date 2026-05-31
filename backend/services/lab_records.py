@@ -217,6 +217,28 @@ def get_report_detail(session: Session, report_id: int) -> LabReportDetail:
     )
 
 
+def delete_report(session: Session, report_id: int) -> int:
+    """Remove a lab report, its observations, and the stored PDF from disk."""
+    report = session.get(LabReport, report_id)
+    if report is None:
+        raise LabReportNotFoundError(report_id)
+
+    observations = session.exec(
+        select(LabObservation).where(LabObservation.report_id == report_id)
+    ).all()
+    for observation in observations:
+        session.delete(observation)
+
+    if report.document_path:
+        abs_path = _documents_root() / report.document_path
+        if abs_path.exists():
+            abs_path.unlink()
+
+    session.delete(report)
+    session.commit()
+    return report_id
+
+
 def get_document(session: Session, report_id: int) -> tuple[Path, str, str]:
     """Return (absolute_path, download_filename, content_type) for the source doc."""
     report = session.get(LabReport, report_id)

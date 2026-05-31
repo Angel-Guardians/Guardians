@@ -132,6 +132,11 @@ export const api = {
   getLabRecord: (reportId: number) =>
     getJson<LabReportDetail>(`/lab-records/${reportId}`),
 
+  deleteLabRecord: (reportId: number) =>
+    sendJson<{ report_id: number; deleted: boolean }>(`/lab-records/${reportId}`, {
+      method: "DELETE",
+    }),
+
   // TODO(backend): GET /medications?patient_id= not implemented yet.
   listMedications: (patientId: number) =>
     getJson<Medication[]>(`/medications?patient_id=${patientId}`),

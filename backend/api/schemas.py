@@ -188,3 +188,8 @@ class LabUploadResult(BaseModel):
     # LLM extraction of profile fields (name/age/conditions/allergies/meds) from
     # the document text, merged into the patient profile. None when not attempted.
     profile: MedicalHistoryExtraction | None = None
+
+
+class LabReportDeleteResult(BaseModel):
+    report_id: int
+    deleted: bool = True
