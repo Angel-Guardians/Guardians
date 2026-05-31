@@ -70,6 +70,7 @@ class GuardianAgent:
         self._llm = llm or build_llm()
         self._registry = registry or build_default_registry()
         self._history: list[Message] = []
+        self._last_route: str = "companion"
         self._agents = {
             "safety": SafetyAgent(self._llm, self._registry),
             "companion": CompanionAgent(self._llm, self._registry),
@@ -90,9 +91,14 @@ class GuardianAgent:
         # Include the last 4 messages (2 turns) so the router can classify
         # short replies like "yes" or "maybe" in context.
         context = (history or [])[-4:]
+        prior_hint = (
+            f"\nThe previous turn was handled by the '{self._last_route}' agent. "
+            "If the patient's reply is a short follow-up (e.g. 'yes', 'no', 'maybe', 'sure'), "
+            "keep routing to the same agent unless the content clearly belongs elsewhere."
+        )
         response = self._llm.chat(
             [
-                Message(role="system", content=_ROUTER_PROMPT),
+                Message(role="system", content=_ROUTER_PROMPT + prior_hint),
                 *context,
                 Message(role="user", content=message),
             ],
@@ -129,6 +135,7 @@ class GuardianAgent:
         )
         reply = result["reply"]
         route = result.get("route", "companion")
+        self._last_route = route
         self._history.append(Message(role="user", content=user_message))
         self._history.append(Message(role="assistant", content=reply))
 
