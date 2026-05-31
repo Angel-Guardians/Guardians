@@ -3,7 +3,9 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { AgentPipelineGraph } from "@/components/agent-pipeline-graph";
+import { LiveSensorsPanel } from "@/components/live-sensors-panel";
 import { LiveTurnPanel, type LiveMode } from "@/components/live-turn-panel";
+import { RiskMonitor } from "@/components/risk-monitor";
 import { PageHeader } from "@/components/page-header";
 import { VoiceSpeaker } from "@/components/voice-speaker";
 import { Badge } from "@/components/ui/badge";
@@ -97,19 +99,27 @@ export default function LivePage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <AgentPipelineGraph
-            pipeline={pipeline}
-            onRunDemo={handleGraphDemo}
-            onReset={demo.reset}
-            isPlaying={demo.isPlaying}
-            activeScenarioId={demo.scenario?.id ?? null}
-          />
-          <LiveTurnPanel
-            pipeline={pipeline}
-            mode={mode}
-            onModeChange={setMode}
-            demo={demo}
-          />
+          <RiskMonitor variant="bar" />
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(140px,168px)_1fr] lg:items-start">
+            <LiveSensorsPanel className="lg:row-span-2 lg:sticky lg:top-4" />
+
+            <AgentPipelineGraph
+              pipeline={pipeline}
+              onRunDemo={handleGraphDemo}
+              onReset={demo.reset}
+              isPlaying={demo.isPlaying}
+              activeScenarioId={demo.scenario?.id ?? null}
+            />
+
+            <LiveTurnPanel
+              className="min-w-0 lg:col-start-2"
+              pipeline={pipeline}
+              mode={mode}
+              onModeChange={setMode}
+              demo={demo}
+            />
+          </div>
         </CardContent>
       </Card>
 

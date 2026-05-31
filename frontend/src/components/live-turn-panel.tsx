@@ -20,6 +20,7 @@ interface LiveTurnPanelProps {
   mode: LiveMode;
   onModeChange: (mode: LiveMode) => void;
   demo: DemoControls;
+  className?: string;
 }
 
 export function LiveTurnPanel({
@@ -27,6 +28,7 @@ export function LiveTurnPanel({
   mode,
   onModeChange,
   demo,
+  className,
 }: LiveTurnPanelProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -67,7 +69,7 @@ export function LiveTurnPanel({
   };
 
   return (
-    <div className="space-y-4 rounded-2xl border bg-card p-4 shadow-sm">
+    <div className={cn("space-y-4 rounded-2xl border bg-card p-4 shadow-sm", className)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Turn</span>

@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { PingButton } from "@/components/ping-button";
+import { RiskMonitor } from "@/components/risk-monitor";
 import { useEventStream, type StreamStatus } from "@/hooks/useEventStream";
 import { api } from "@/lib/api";
 import {
@@ -379,6 +380,8 @@ export function Dashboard() {
           Your at-a-glance view of Guardian. Tap any section for full details.
         </p>
       </header>
+
+      <RiskMonitor />
 
       <div className="grid gap-5 sm:grid-cols-2">
         <SectionCard

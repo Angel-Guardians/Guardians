@@ -10,10 +10,11 @@ page and downstream queries.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlmodel import Session, select
 
 from backend.api.schemas import (
@@ -25,6 +26,9 @@ from backend.api.schemas import (
 )
 from backend.db.models import Vital
 from backend.db.session import get_session
+from backend.events.types import RiskScoreUpdatedEvent
+from backend.services.fall_response import should_trigger, trigger_fall_response
+from backend.services.risk_monitor import RiskMonitor
 
 router = APIRouter()
 
@@ -49,9 +53,50 @@ def _to_naive_utc(ts: datetime) -> datetime:
     return ts
 
 
-@router.post("/ingest", response_model=VitalIngestResult)
-def ingest_vitals(
+async def _after_ingest(
+    request: Request,
+    session: Session,
     batch: VitalIngestBatch,
+    rows: list[Vital],
+) -> None:
+    monitor: RiskMonitor = request.app.state.risk_monitor
+    bus = request.app.state.event_bus
+    guardian = request.app.state.guardian
+
+    snapshot, changed = monitor.compute(session, batch.patient_id)
+    if bus is not None and changed:
+        factors = [
+            {"name": f.name, "score": f.score, "weight": f.weight, "detail": f.detail}
+            for f in snapshot.factors
+        ]
+        await bus.publish(
+            RiskScoreUpdatedEvent(
+                source="api.vitals",
+                score=snapshot.score,
+                level=snapshot.level,
+                factors=factors,
+                patient_id=batch.patient_id,
+                severity=snapshot.severity_tier,
+            ),
+        )
+
+    for row in rows:
+        if should_trigger(batch.patient_id, row.kind):
+            asyncio.create_task(
+                trigger_fall_response(
+                    guardian,
+                    bus,
+                    batch.patient_id,
+                    row.kind,
+                    row.value,
+                ),
+            )
+
+
+@router.post("/ingest", response_model=VitalIngestResult)
+async def ingest_vitals(
+    batch: VitalIngestBatch,
+    request: Request,
     session: Session = Depends(get_session),
 ) -> VitalIngestResult:
     """Accept a batch of readings from a wearable and persist them."""
@@ -69,6 +114,7 @@ def ingest_vitals(
     if rows:
         session.add_all(rows)
         session.commit()
+        await _after_ingest(request, session, batch, rows)
     return VitalIngestResult(accepted=len(rows))
 
 

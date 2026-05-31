@@ -9,11 +9,32 @@ not a sub-agent's job. See ARCHITECTURE.md sec. 3.5.
 from __future__ import annotations
 
 from backend.db.models import SeverityTier
-from backend.events.types import GuardianEvent
+from backend.events.types import AudioEventDetectedEvent, GuardianEvent, VitalSampleEvent
 
 
 class RiskClassifier:
     async def classify(self, event: GuardianEvent) -> SeverityTier:
         """Return the severity tier for this event."""
-        # TODO: rule table by event_type
-        raise NotImplementedError
+        if isinstance(event, AudioEventDetectedEvent) and event.event_class in (
+            "fall_sound",
+            "glass_break",
+        ):
+            return SeverityTier.CALL
+
+        if isinstance(event, VitalSampleEvent) and event.kind in (
+            "fall_suspected",
+            "fall_confirmed",
+        ):
+            return SeverityTier.CALL
+
+        event_type = getattr(event, "type", None)
+        if event_type == "audio_event_detected":
+            payload = event.model_dump()
+            if payload.get("event_class") in ("fall_sound", "glass_break"):
+                return SeverityTier.CALL
+        if event_type == "vital_sample":
+            payload = event.model_dump()
+            if payload.get("kind") in ("fall_suspected", "fall_confirmed"):
+                return SeverityTier.CALL
+
+        return SeverityTier.WHISPER

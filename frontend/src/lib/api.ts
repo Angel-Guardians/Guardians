@@ -15,6 +15,7 @@ import type {
   Patient,
   PatientProfile,
   PatientProfileUpdate,
+  RiskSnapshot,
   VitalKind,
   VitalSeries,
 } from "@/lib/types";
@@ -112,6 +113,9 @@ export const api = {
 
   // Recent fall events from the watch (newest first).
   getFalls: (since = "24h") => getJson<FallEvent[]>(`/vitals/falls?since=${since}`),
+
+  getRiskScore: (patientId: number = resolveActivePatientId()) =>
+    getJson<RiskSnapshot>(`/risk/current?patient_id=${patientId}`),
 
   // GPS track from the wearable (newest first).
   getLocations: (since = "24h", patientId: number = resolveActivePatientId()) =>

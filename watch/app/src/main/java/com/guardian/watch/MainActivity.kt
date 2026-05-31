@@ -1,6 +1,7 @@
 package com.guardian.watch
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -75,7 +76,7 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
             onToggleMonitoring = { on -> if (on) vm.startMonitoring() else vm.stopMonitoring() },
             onSyncNow = vm::syncNow,
             onTestFall = vm::simulateFall,
-            onReset = vm::resetVoice,
+            onReset = { restartApp(context) },
             onOpenSettings = { screen = Screen.Settings },
         )
 
@@ -86,6 +87,15 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
             onBack = { screen = Screen.Monitor },
         )
     }
+}
+
+/** Fully restart the app: relaunch the task in a fresh process. */
+private fun restartApp(context: android.content.Context) {
+    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+    if (launch?.component != null) {
+        context.startActivity(Intent.makeRestartActivityTask(launch.component))
+    }
+    Runtime.getRuntime().exit(0)
 }
 
 private fun requiredPermissions(): Array<String> = buildList {

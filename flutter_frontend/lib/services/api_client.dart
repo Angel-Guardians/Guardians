@@ -123,6 +123,13 @@ class ApiClient {
         .toList();
   }
 
+  Future<RiskSnapshot> getRiskScore({required int patientId}) async {
+    final data = await _getJson('/risk/current', {
+      'patient_id': patientId,
+    }) as Map<String, dynamic>;
+    return RiskSnapshot.fromJson(data);
+  }
+
   // --- Location -----------------------------------------------------------
 
   Future<List<LocationPoint>> getLocations(

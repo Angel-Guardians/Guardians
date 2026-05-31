@@ -194,6 +194,9 @@ class MonitoringService : Service() {
         }
         vibrate()
         raiseFallAlert(peakG)
+        // Proactively check in by voice: ask how they're feeling. The server
+        // decides the follow-up — call for help if hurt, otherwise reassure.
+        runCatching { g.voiceSession.startFallCheckIn() }
     }
 
     private fun raiseFallAlert(peakG: Float) {

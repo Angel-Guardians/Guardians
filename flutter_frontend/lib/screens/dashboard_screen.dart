@@ -23,6 +23,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Medication> _meds = [];
   List<LocationPoint> _locations = [];
   List<FallEvent> _falls = [];
+  RiskSnapshot? _risk;
   bool _loading = true;
   int _loadedForPatient = -1;
 
@@ -47,6 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       api.listMedications(pid).then<List<Medication>>((v) => v).catchError((_) => <Medication>[]),
       api.getLocations(patientId: pid).then<List<LocationPoint>>((v) => v).catchError((_) => <LocationPoint>[]),
       api.getFalls(patientId: pid).then<List<FallEvent>>((v) => v).catchError((_) => <FallEvent>[]),
+      api.getRiskScore(patientId: pid).then<RiskSnapshot?>((v) => v).catchError((_) => null),
     ]);
     if (!mounted) return;
     setState(() {
@@ -56,6 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _meds = results[3] as List<Medication>;
       _locations = results[4] as List<LocationPoint>;
       _falls = results[5] as List<FallEvent>;
+      _risk = results[6] as RiskSnapshot?;
       _loading = false;
     });
   }
@@ -88,6 +91,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           _greeting(context, profile),
           const SizedBox(height: 16),
+          if (_risk != null) ...[
+            _riskCard(context, _risk!),
+            const SizedBox(height: 16),
+          ],
           if (_recentFall != null) ...[
             _FallBanner(fall: _recentFall!),
             const SizedBox(height: 16),
@@ -140,6 +147,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ?.copyWith(fontWeight: FontWeight.w800),
         ),
       ],
+    );
+  }
+
+  Widget _riskCard(BuildContext context, RiskSnapshot risk) {
+    Color color;
+    switch (risk.level) {
+      case 'critical':
+        color = AppTheme.danger;
+      case 'high':
+        color = Colors.orange;
+      case 'moderate':
+        color = AppTheme.warn;
+      default:
+        color = AppTheme.good;
+    }
+    final urgent = risk.level == 'critical' || risk.level == 'high';
+
+    return SectionCard(
+      icon: Icons.shield_outlined,
+      iconColor: color,
+      title: 'Risk monitor',
+      subtitle: '${risk.level[0].toUpperCase()}${risk.level.substring(1)} · '
+          'updated ${_ago(risk.updatedAt)}',
+      trailing: StatusPill(
+        label: risk.score.toStringAsFixed(0),
+        color: color,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (risk.score / 100).clamp(0.0, 1.0),
+              minHeight: 8,
+              backgroundColor: color.withOpacity(0.15),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+          if (urgent) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Elevated risk — Guardian is monitoring closely.',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+          if (risk.factors.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final f in risk.factors)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(f.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    Flexible(
+                      child: Text(
+                        f.detail,
+                        textAlign: TextAlign.end,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
     );
   }
 

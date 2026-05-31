@@ -108,6 +108,26 @@ class FallEventRead(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Risk monitoring (weighted vitals score + fall override)
+# ---------------------------------------------------------------------------
+
+
+class RiskFactorRead(BaseModel):
+    name: str
+    score: float
+    weight: float
+    detail: str
+
+
+class RiskSnapshotRead(BaseModel):
+    score: float
+    level: str  # low | moderate | high | critical
+    severity_tier: str
+    factors: list[RiskFactorRead] = Field(default_factory=list)
+    updated_at: str  # ISO-8601
+
+
+# ---------------------------------------------------------------------------
 # Location track (wearable GPS -> backend) + read-back for the map
 # ---------------------------------------------------------------------------
 

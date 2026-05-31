@@ -135,6 +135,8 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
             repo.record(kind = "fall_suspected", value = 3.5)
             runCatching { repo.syncOnce() }
         }
+        // Also kick off the spoken check-in so the whole flow can be tested.
+        voice.startFallCheckIn()
     }
 
     private data class Vitals(val hr: Double?, val steps: Double?, val calories: Double?, val unsent: Int)

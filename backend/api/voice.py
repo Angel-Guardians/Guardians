@@ -71,10 +71,60 @@ async def _stream_tts(websocket: WebSocket, text: str, voice: str) -> None:
     await producer  # surface any exception raised inside the generator
 
 
-async def _handle_utterance(
-    websocket: WebSocket, pcm: bytes, sample_rate: int, ctx, patient_id: int = 1
+# What Guardian asks right after a fall is detected by the watch.
+_FALL_CHECKIN_QUESTION = (
+    "I noticed you may have fallen. Are you alright? "
+    "Please tell me how you're feeling — does anything hurt?"
+)
+
+
+def _fall_answer_prompt(answer: str) -> str:
+    """Wrap the patient's reply with fall context so the agent follows up right."""
+    return (
+        "A fall was just detected by the patient's watch. They were asked how they "
+        f'are feeling and replied: "{answer}".\n\n'
+        "Decide the follow-up based ONLY on their reply: if they mention any injury, "
+        "pain, bleeding, a possible broken bone, hitting their head, being unable to "
+        "get up or move, dizziness, confusion, or they sound unsure or distressed — "
+        "treat this as an emergency and call for help (911 and/or their caregiver). "
+        "If they clearly say they are unhurt and fine, do NOT call anyone — simply "
+        "reassure them warmly, stay with them, and offer to help them up."
+    )
+
+
+async def _handle_fall_checkin(
+    websocket: WebSocket, ctx, patient_id: int = 1
 ) -> None:
-    """Transcribe one utterance, run a turn, and speak the reply back."""
+    """Speak the fall check-in question; the watch then listens for the answer."""
+    bus = ctx.bus
+    monitor = ctx.monitor
+    question = _FALL_CHECKIN_QUESTION
+    await websocket.send_json({"type": "reply", "text": question, "route": "safety"})
+    if monitor is not None:
+        monitor.broadcast_event({"type": "reply", "text": question, "route": "safety"})
+    if bus is not None:
+        await bus.publish(
+            AgentReplyEvent(source="agent.safety", agent="safety", text=question)
+        )
+    if question.strip():
+        await websocket.send_json({"type": "tts_begin", "sample_rate": TTS_SAMPLE_RATE})
+        await _stream_tts(websocket, question, voice_for_route("safety"))
+        await websocket.send_json({"type": "tts_end"})
+
+
+async def _handle_utterance(
+    websocket: WebSocket,
+    pcm: bytes,
+    sample_rate: int,
+    ctx,
+    patient_id: int = 1,
+    fall_context: bool = False,
+) -> None:
+    """Transcribe one utterance, run a turn, and speak the reply back.
+
+    When [fall_context] is set, this utterance is the patient's answer to the
+    fall check-in, so we wrap it so the agent decides call-vs-companion.
+    """
     guardian = ctx.guardian
     bus = ctx.bus
     if guardian is None:
@@ -93,8 +143,10 @@ async def _handle_utterance(
     if bus is not None:
         await bus.publish(TranscriptEvent(source="voice.ws", text=text))
 
-    # 2) One Guardian turn (synchronous graph -> worker thread).
-    result = await asyncio.to_thread(guardian.turn, text)
+    # 2) One Guardian turn (synchronous graph -> worker thread). After a fall we
+    # feed the agent the answer wrapped in fall context so it follows up safely.
+    agent_input = _fall_answer_prompt(text) if fall_context else text
+    result = await asyncio.to_thread(guardian.turn, agent_input)
     reply = result.get("reply", "")
     route = result.get("route", "companion")
     await websocket.send_json({"type": "reply", "text": reply, "route": route})
@@ -132,6 +184,7 @@ async def voice_ws(websocket: WebSocket) -> None:
     sample_rate = 16_000
     patient_id = 1
     capturing = False
+    awaiting_fall_answer = False
 
     try:
         while True:
@@ -172,6 +225,16 @@ async def voice_ws(websocket: WebSocket) -> None:
                     ctx.monitor.broadcast_event(
                         {"type": "mic_begin", "sample_rate": sample_rate}
                     )
+            elif kind == "fall_checkin":
+                # The watch detected a fall: ask how they're feeling. The next
+                # utterance (their answer) is handled with fall context.
+                patient_id = int(control.get("patient_id", patient_id))
+                try:
+                    await _handle_fall_checkin(websocket, ctx, patient_id)
+                    awaiting_fall_answer = True
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("fall check-in failed")
+                    await websocket.send_json({"type": "error", "message": str(exc)})
             elif kind == "end":
                 if not capturing:
                     continue
@@ -180,8 +243,12 @@ async def voice_ws(websocket: WebSocket) -> None:
                 buffer.clear()
                 if ctx.monitor is not None:
                     ctx.monitor.broadcast_event({"type": "mic_end"})
+                fall_context = awaiting_fall_answer
+                awaiting_fall_answer = False
                 try:
-                    await _handle_utterance(websocket, pcm, sample_rate, ctx, patient_id)
+                    await _handle_utterance(
+                        websocket, pcm, sample_rate, ctx, patient_id, fall_context
+                    )
                 except Exception as exc:  # noqa: BLE001 — one bad turn shouldn't kill the socket
                     logger.exception("voice turn failed")
                     await websocket.send_json({"type": "error", "message": str(exc)})

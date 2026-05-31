@@ -88,6 +88,47 @@ class VoiceSession(
         if (on) startListening() else stopListening()
     }
 
+    /**
+     * Begin a hands-free fall check-in: ask the server to speak "are you okay?",
+     * then listen for the answer (handled like any utterance, but the server
+     * follows up based on it — calling for help if they're hurt). Works whether
+     * or not the voice assistant was already on.
+     */
+    fun startFallCheckIn() {
+        if (!hasMicPermission()) {
+            _state.value = _state.value.copy(error = "Microphone permission needed")
+            return
+        }
+        watchdog?.cancel()
+        stopPlayback()
+        if (!enabled) {
+            enabled = true
+            vad.reset()
+            preRoll.clear()
+            // Gate the mic (phase != Listening/Capturing) until the spoken
+            // question finishes; then onTtsEnd re-arms us to capture the answer.
+            _state.value = UiState(phase = Phase.Thinking)
+            recorder.start()
+            loopJob = scope.launch(Dispatchers.IO) {
+                baseUrl = settings.baseUrl.first()
+                patientId = settings.patientId.first()
+                client.connect(baseUrl)
+                client.sendFallCheckIn(patientId)
+                runCatching {
+                    recorder.record { chunk, len -> onFrame(chunk, len) }
+                }.onFailure { Log.w(TAG, "recorder failed", it) }
+            }
+        } else {
+            vad.reset()
+            preRoll.clear()
+            _state.value = _state.value.copy(phase = Phase.Thinking, level = 0f)
+            scope.launch(Dispatchers.IO) {
+                client.connect(baseUrl)
+                client.sendFallCheckIn(patientId)
+            }
+        }
+    }
+
     private fun startListening() {
         if (!hasMicPermission()) {
             _state.value = _state.value.copy(error = "Microphone permission needed")

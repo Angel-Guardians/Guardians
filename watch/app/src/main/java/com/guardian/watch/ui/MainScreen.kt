@@ -58,7 +58,7 @@ fun MainScreen(
                 Chip(
                     onClick = onReset,
                     label = { Text("Reset") },
-                    secondaryLabel = { Text("Clear conversation") },
+                    secondaryLabel = { Text("Restart the app") },
                     colors = ChipDefaults.secondaryChipColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )

@@ -74,6 +74,13 @@ class VoiceStreamClient(private val listener: Listener) {
         Log.i(TAG, "sendEnd enqueued=$ok")
     }
 
+    /** Ask the server to start a fall check-in (it speaks "are you okay?"). */
+    fun sendFallCheckIn(patientId: Int) {
+        val msg = JSONObject().put("type", "fall_checkin").put("patient_id", patientId)
+        val ok = webSocket?.send(msg.toString())
+        Log.i(TAG, "sendFallCheckIn enqueued=$ok")
+    }
+
     fun close() {
         webSocket?.close(1000, null)
         webSocket = null

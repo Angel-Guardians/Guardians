@@ -34,6 +34,8 @@ def _summarise(ev: GuardianEvent) -> str:
         return f'call {who} ({d.get("phone")})'
     if t == "vital_sample":
         return f'{d.get("kind")} = {d.get("value")} ({d.get("device")})'
+    if t == "risk_score_updated":
+        return f'risk {d.get("level")} ({d.get("score")})'
     return t
 
 

@@ -84,6 +84,21 @@ export interface FallEvent {
   source: string;
 }
 
+export interface RiskFactor {
+  name: string;
+  score: number;
+  weight: number;
+  detail: string;
+}
+
+export interface RiskSnapshot {
+  score: number;
+  level: "low" | "moderate" | "high" | "critical";
+  severity_tier: string;
+  factors: RiskFactor[];
+  updated_at: string;
+}
+
 export interface LocationPoint {
   lat: number;
   lng: number;

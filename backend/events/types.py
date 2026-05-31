@@ -174,6 +174,16 @@ class PipelineStepEvent(GuardianEvent):
 # ---------------------------------------------------------------------------
 
 
+class RiskScoreUpdatedEvent(GuardianEvent):
+    """Composite risk score recomputed after vitals ingest or on demand."""
+
+    type: Literal["risk_score_updated"] = "risk_score_updated"
+    score: float
+    level: str  # low | moderate | high | critical
+    factors: list[dict[str, Any]] = Field(default_factory=list)
+    patient_id: int = 1
+
+
 class CallRequestEvent(GuardianEvent):
     """The agent invoked a call tool (call_911 / notify_caregiver / call_person).
 
