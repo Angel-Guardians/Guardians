@@ -20,14 +20,56 @@ CALL_LOG: list[dict[str, Any]] = []
 
 
 def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
-    """STUB: pretend to dispatch emergency medical services."""
+    """Call emergency services via Twilio <Say>.
+
+    In production, TWILIO_911_NUMBER should be a certified dispatch line.
+    For dev/testing, set it to any phone number you want to receive the call.
+    Falls back to stub when Twilio credentials or the emergency number are absent.
+    """
+    twilio_ready = bool(
+        os.getenv("TWILIO_ACCOUNT_SID")
+        and os.getenv("TWILIO_AUTH_TOKEN")
+        and os.getenv("TWILIO_FROM_NUMBER")
+    )
+    emergency_number = os.getenv("TWILIO_911_NUMBER", "")
+
+    if not twilio_ready or not emergency_number:
+        event = {
+            "tool": "call_911",
+            "status": "stub",
+            "service": "EMS",
+            "eta_minutes": 8,
+            "reason": reason,
+            "location": location,
+            "note": "Set TWILIO_* and TWILIO_911_NUMBER in .env to enable real calls.",
+        }
+        CALL_LOG.append(event)
+        return event
+
+    spoken_message = (
+        f"Emergency alert. A Guardian AI system is reporting an incident. "
+        f"Reason: {reason}. Location: {location}. "
+        f"Please send emergency medical services immediately."
+    )
+
+    from twilio.rest import Client as TwilioClient
+
+    twilio = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+    twiml = f'<Response><Say voice="Polly.Joanna">{spoken_message}</Say></Response>'
+    call = twilio.calls.create(
+        to=emergency_number,
+        from_=os.getenv("TWILIO_FROM_NUMBER"),
+        twiml=twiml,
+    )
+
     event = {
         "tool": "call_911",
-        "status": "dispatched",
+        "status": "called",
         "service": "EMS",
-        "eta_minutes": 8,
+        "phone": emergency_number,
         "reason": reason,
         "location": location,
+        "call_sid": call.sid,
     }
     CALL_LOG.append(event)
     return event
@@ -100,8 +142,9 @@ def register(registry) -> None:
     registry.register(
         ToolSpec(
             name="call_911",
-            description="Dispatch emergency medical services. Use only for a genuine "
-            "emergency: fall, chest pain, difficulty breathing, unresponsiveness.",
+            description="Call emergency services (911). Use only for a genuine "
+            "emergency: fall, chest pain, difficulty breathing, unresponsiveness. "
+            "This places a real phone call — only invoke when the situation is critical.",
             parameters={
                 "type": "object",
                 "properties": {
