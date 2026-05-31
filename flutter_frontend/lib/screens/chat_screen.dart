@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../services/api_client.dart';
+import '../services/call_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/call_sheet.dart';
 import '../widgets/common.dart';
 
 /// A chat-style screen that sends a turn to Guardian and shows the spoken
@@ -20,13 +22,19 @@ class _ChatMessage {
   _ChatMessage.user(this.text)
       : isUser = true,
         route = null,
-        toolCalls = const [];
-  _ChatMessage.guardian(this.text, this.route, this.toolCalls) : isUser = false;
+        toolCalls = const [],
+        callTarget = null;
+  _ChatMessage.guardian(this.text, this.route, this.toolCalls)
+      : isUser = false,
+        callTarget = CallService.extractCallTarget(toolCalls);
 
   final String text;
   final bool isUser;
   final String? route;
   final List<ToolCall> toolCalls;
+
+  /// A number Guardian asked us to call (from a call_* / alert_* tool), if any.
+  final CallTarget? callTarget;
 }
 
 const _suggestions = [
@@ -69,10 +77,19 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
     try {
       final res = await state.api.turn(trimmed, state.activePatientId);
-      setState(() {
-        _messages.add(
-            _ChatMessage.guardian(res.reply, res.route, res.toolCalls));
-      });
+      final msg = _ChatMessage.guardian(res.reply, res.route, res.toolCalls);
+      setState(() => _messages.add(msg));
+      // Guardian asked us to call someone — offer to place it (and speak the
+      // reply aloud) right away.
+      if (msg.callTarget != null && mounted) {
+        await showEmergencyCallSheet(
+          context,
+          number: msg.callTarget!.number,
+          name: msg.callTarget!.name,
+          message: res.reply,
+          emergency: res.route == 'safety',
+        );
+      }
     } on ApiException catch (e) {
       setState(() {
         _messages.add(_ChatMessage.guardian(
@@ -294,6 +311,25 @@ class _Bubble extends StatelessWidget {
                         color: theme.colorScheme.onSurfaceVariant,
                         icon: Icons.build_rounded),
                 ],
+              ),
+            ),
+          if (message.callTarget != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: meta?.$3 ?? AppTheme.danger,
+                  minimumSize: const Size(0, 44),
+                ),
+                onPressed: () => showEmergencyCallSheet(
+                  context,
+                  number: message.callTarget!.number,
+                  name: message.callTarget!.name,
+                  message: message.text,
+                  emergency: message.route == 'safety',
+                ),
+                icon: const Icon(Icons.call_rounded, size: 18),
+                label: Text('Call ${message.callTarget!.name ?? message.callTarget!.number}'),
               ),
             ),
         ],

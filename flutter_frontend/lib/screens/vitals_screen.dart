@@ -157,7 +157,7 @@ class _VitalChartCard extends StatelessWidget {
 
   Widget _buildChart(BuildContext context, List<VitalPoint> points) {
     final theme = Theme.of(context);
-    final minX = 0.0;
+    const minX = 0.0;
     final maxX = (points.length - 1).toDouble();
 
     List<FlSpot> spots(double Function(VitalPoint) sel) => [

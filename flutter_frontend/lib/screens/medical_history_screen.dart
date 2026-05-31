@@ -19,7 +19,6 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
   List<LabReport> _reports = [];
   bool _loading = true;
   bool _uploading = false;
-  String? _error;
   LabUploadResult? _lastResult;
 
   @override
@@ -40,10 +39,8 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _error = 'Couldn\'t load records.';
-        _loading = false;
-      });
+      setState(() => _loading = false);
+      _snack('Couldn\'t load records.');
     }
   }
 
@@ -69,7 +66,6 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
     setState(() {
       _uploading = true;
       _lastResult = null;
-      _error = null;
     });
     try {
       final res = await state.api.uploadLabRecord(

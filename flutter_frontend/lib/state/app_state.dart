@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import '../models/models.dart';
 import '../services/api_client.dart';
+import '../services/call_service.dart';
 
 /// Global app state: backend URL, active patient, patient list, and the
 /// currently loaded profile. Screens read this via Provider and call its
@@ -14,6 +15,9 @@ class AppState extends ChangeNotifier {
   }
 
   late final ApiClient api;
+
+  /// Places real phone calls via the SIM and speaks alerts aloud.
+  final CallService callService = CallService();
 
   String _baseUrl = AppConfig.defaultBaseUrl;
   String get baseUrl => _baseUrl;

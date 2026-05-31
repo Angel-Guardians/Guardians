@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/call_sheet.dart';
 import '../widgets/common.dart';
 import '../widgets/tag_input.dart';
 
@@ -316,8 +317,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 },
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             IconButton(
+              tooltip: 'Call now',
+              icon: const Icon(Icons.call_rounded),
+              color: AppTheme.good,
+              onPressed: c.phone.trim().isEmpty
+                  ? null
+                  : () => showEmergencyCallSheet(
+                        context,
+                        number: c.phone,
+                        name: c.name.isEmpty ? c.relationship : c.name,
+                        message:
+                            'Hello, this is a Guardian alert for ${p.name}. '
+                            'Please check on them when you can.',
+                      ),
+            ),
+            IconButton(
+              tooltip: 'Remove',
               icon: const Icon(Icons.delete_outline),
               color: AppTheme.danger,
               onPressed: () =>
