@@ -42,7 +42,7 @@ def build_guardian_graph(
     """
 
     def router_node(state: GuardianState) -> GuardianState:
-        return {"route": route_fn(state["user_message"])}
+        return {"route": route_fn(state["user_message"], state.get("history", []))}
 
     def make_specialist_node(agent: ToolCallingAgent) -> Callable[[GuardianState], GuardianState]:
         def node(state: GuardianState) -> GuardianState:
