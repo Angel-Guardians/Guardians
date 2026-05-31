@@ -82,6 +82,16 @@ class OpenAICompatibleClient(LLMClient):
             payload["tools"] = [self._encode_tool(t) for t in tools]
         payload.update(overrides)
 
+        # Nemotron (served via trtllm) defaults to reasoning "on", emitting a long
+        # <think> block before the answer. Under the router's small max_tokens that
+        # empties `content` (every turn falls back to "companion"), and it delays /
+        # suppresses tool calls in the specialists. Turn it off for local providers.
+        # OpenAI cloud rejects unknown body fields, so only do this off-cloud.
+        if self._settings.provider != "openai":
+            extra_body = payload.get("extra_body") or {}
+            extra_body.setdefault("chat_template_kwargs", {"enable_thinking": False})
+            payload["extra_body"] = extra_body
+
         try:
             raw = self._client.chat.completions.create(**payload)
         except Exception as exc:  # wrap ANY vendor error into a neutral type
