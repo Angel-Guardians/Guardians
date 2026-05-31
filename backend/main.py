@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from backend.api import admin, events_sse, lab_records, patient, turn, vitals
@@ -73,6 +74,11 @@ def create_app() -> FastAPI:
     app.include_router(lab_records.router, prefix="/lab-records", tags=["lab-records"])
     app.include_router(events_sse.router, prefix="/events", tags=["events"])
     app.include_router(turn.router, prefix="/turn", tags=["turn"])
+
+    import os, pathlib
+    audio_dir = pathlib.Path(__file__).parent / "static" / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/audio", StaticFiles(directory=str(audio_dir)), name="audio")
 
     @app.get("/health")
     async def health() -> dict[str, str]:
