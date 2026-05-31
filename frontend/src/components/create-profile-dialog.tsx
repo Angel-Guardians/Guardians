@@ -10,7 +10,6 @@ import { api, ApiError } from "@/lib/api";
 import type { PatientProfile, PatientProfileUpdate } from "@/lib/types";
 
 interface CreateProfileDialogProps {
-  open: boolean;
   onClose: () => void;
   /** Called with the freshly created profile after a successful save. */
   onCreated: (profile: PatientProfile) => void;
@@ -20,8 +19,10 @@ interface CreateProfileDialogProps {
  * Quick-create modal: captures just the essentials (name, age, optional home
  * location) and creates the patient. The rest of the profile — conditions,
  * medications, emergency contacts — is filled in afterward on the /profile page.
+ *
+ * Mounted only while open (by the parent), so its state is always fresh.
  */
-export function CreateProfileDialog({ open, onClose, onCreated }: CreateProfileDialogProps) {
+export function CreateProfileDialog({ onClose, onCreated }: CreateProfileDialogProps) {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [location, setLocation] = useState("");
@@ -29,14 +30,8 @@ export function CreateProfileDialog({ open, onClose, onCreated }: CreateProfileD
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Reset + focus whenever the dialog opens.
+  // Autofocus the first field and close on Escape (no state writes here).
   useEffect(() => {
-    if (!open) return;
-    setName("");
-    setAge("");
-    setLocation("");
-    setError(null);
-    setSaving(false);
     const id = window.setTimeout(() => nameRef.current?.focus(), 50);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -44,9 +39,7 @@ export function CreateProfileDialog({ open, onClose, onCreated }: CreateProfileD
       window.clearTimeout(id);
       window.removeEventListener("keydown", onKey);
     };
-  }, [open, onClose]);
-
-  if (!open) return null;
+  }, [onClose]);
 
   const ageNum = Number(age);
   const canSubmit =

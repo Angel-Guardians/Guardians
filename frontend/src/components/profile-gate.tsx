@@ -98,11 +98,9 @@ export function ProfileGate() {
         )}
       </div>
 
-      <CreateProfileDialog
-        open={creating}
-        onClose={() => setCreating(false)}
-        onCreated={onCreated}
-      />
+      {creating && (
+        <CreateProfileDialog onClose={() => setCreating(false)} onCreated={onCreated} />
+      )}
     </div>
   );
 }

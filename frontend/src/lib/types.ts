@@ -24,6 +24,8 @@ export interface PatientProfile {
   conditions: string[];
   allergies: string[];
   primary_language: string;
+  location?: string | null;
+  bio?: string | null;
   notes?: string | null;
   emergency_contacts: EmergencyContact[];
   medications: ProfileMedication[];
