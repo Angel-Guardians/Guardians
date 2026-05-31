@@ -11,100 +11,117 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
- * Drives one push-to-talk voice turn end-to-end against `/voice/ws`:
+ * Hands-free voice against `/voice/ws`, gated by on-device VAD.
  *
- *   press  -> open socket (if needed), `start`, stream mic PCM up
- *   release-> stop mic, `end`, wait for transcript + reply
- *   reply  -> play the streamed TTS PCM back through the speaker
+ * When enabled, the mic runs continuously and [VoiceActivityDetector] decides
+ * when the wearer is speaking: on speech onset we open an utterance (`start` +
+ * a short pre-roll so the first syllable isn't clipped) and stream PCM; on
+ * sustained silence we send `end` and wait for the spoken reply.
  *
- * Half-duplex by construction: the mic only runs between press and release, so
- * the watch never records its own playback — no echo, no acoustic feedback, and
- * no need for echo cancellation. The socket stays open across turns; [shutdown]
- * tears everything down when the user leaves the voice screen.
+ * Half-duplex by design: while we're waiting for a reply (Thinking) or playing
+ * one (Speaking) the mic frames are dropped, so the watch never re-detects its
+ * own TTS as speech. After the reply finishes we re-arm and listen again. A
+ * watchdog re-arms us if the backend goes quiet, so one stuck turn can't wedge
+ * the session.
  */
 class VoiceSession(
     private val context: Context,
     private val settings: SettingsStore,
 ) : VoiceStreamClient.Listener {
 
-    enum class Phase { Idle, Connecting, Listening, Thinking, Speaking }
+    enum class Phase { Off, Listening, Capturing, Thinking, Speaking }
 
     data class UiState(
-        val phase: Phase = Phase.Idle,
+        val phase: Phase = Phase.Off,
         val transcript: String = "",
         val reply: String = "",
+        val level: Float = 0f,
         val error: String? = null,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val client = VoiceStreamClient(this)
     private val recorder = AudioRecorder()
+    private val vad = VoiceActivityDetector()
 
     @Volatile
     private var player: AudioPlayer? = null
 
     @Volatile
-    private var recordJob: Job? = null
+    private var enabled = false
+
+    @Volatile
+    private var baseUrl: String = ""
+
+    @Volatile
+    private var patientId: Int = SettingsStore.DEFAULT_PATIENT_ID
+
+    private var loopJob: Job? = null
+    private var watchdog: Job? = null
+
+    // Recent frames kept so a detected utterance includes a little audio from
+    // *before* the VAD fired (energy VAD always trips a frame or two late).
+    private val preRoll = ArrayDeque<ByteArray>()
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    val isEnabled: Boolean get() = enabled
 
     private fun hasMicPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** Push-to-talk pressed: connect if needed and start streaming the mic. */
-    fun startTalking() {
+    /** Turn hands-free voice on or off. */
+    fun setEnabled(on: Boolean) {
+        if (on == enabled) return
+        if (on) startListening() else stopListening()
+    }
+
+    private fun startListening() {
         if (!hasMicPermission()) {
             _state.value = _state.value.copy(error = "Microphone permission needed")
             return
         }
-        // Interrupt any reply that's still playing so the user can barge in.
-        stopPlayback()
-
-        _state.value = UiState(phase = if (client.isConnected) Phase.Listening else Phase.Connecting)
-
-        // Arm before launching so a fast release can't lose the race (see AudioRecorder).
+        enabled = true
+        vad.reset()
+        preRoll.clear()
+        _state.value = UiState(phase = Phase.Listening)
         recorder.start()
-        recordJob = scope.launch {
-            val baseUrl = settings.baseUrl.first()
-            val patientId = settings.patientId.first()
-            Log.i(TAG, "startTalking: baseUrl=$baseUrl patientId=$patientId connected=${client.isConnected}")
+        loopJob = scope.launch(Dispatchers.IO) {
+            baseUrl = settings.baseUrl.first()
+            patientId = settings.patientId.first()
+            Log.i(TAG, "voice enabled: baseUrl=$baseUrl patientId=$patientId")
             client.connect(baseUrl)
-            client.sendStart(patientId, AudioRecorder.SAMPLE_RATE)
-            _state.value = _state.value.copy(phase = Phase.Listening)
-            launch(Dispatchers.IO) {
-                var frames = 0
-                runCatching {
-                    recorder.record { chunk, len ->
-                        client.sendAudio(chunk, len)
-                        frames++
-                    }
-                }.onFailure {
-                    Log.w(TAG, "recorder failed", it)
-                    _state.value = _state.value.copy(error = it.message)
+            var frames = 0
+            runCatching {
+                recorder.record { chunk, len ->
+                    onFrame(chunk, len)
+                    frames++
                 }
-                Log.i(TAG, "recorder stopped after $frames frames")
-            }
+            }.onFailure { Log.w(TAG, "recorder failed", it) }
+            Log.i(TAG, "recorder stopped after $frames frames")
         }
     }
 
-    /** Push-to-talk released: stop the mic and ask the backend to answer. */
-    fun stopTalking() {
-        Log.i(TAG, "stopTalking: phase=${_state.value.phase}")
+    private fun stopListening() {
+        enabled = false
         recorder.stop()
-        recordJob = null
-        if (_state.value.phase == Phase.Listening || _state.value.phase == Phase.Connecting) {
-            _state.value = _state.value.copy(phase = Phase.Thinking)
-            client.sendEnd()
-        }
+        loopJob = null
+        watchdog?.cancel()
+        stopPlayback()
+        client.close()
+        _state.value = UiState(phase = Phase.Off)
     }
 
     fun shutdown() {
@@ -114,34 +131,106 @@ class VoiceSession(
         scope.cancel()
     }
 
+    // --- Capture loop (runs on the recorder's IO thread) ----------------------
+
+    private fun onFrame(chunk: ByteArray, len: Int) {
+        val phase = _state.value.phase
+        // Half-duplex gate: never feed the mic while thinking or speaking.
+        if (phase != Phase.Listening && phase != Phase.Capturing) return
+
+        val rms = rms(chunk, len)
+        if (phase == Phase.Listening) {
+            preRoll.addLast(chunk.copyOf(len))
+            if (preRoll.size > PRE_ROLL_FRAMES) preRoll.removeFirst()
+        }
+
+        when (vad.process(rms)) {
+            VoiceActivityDetector.Event.START -> {
+                client.connect(baseUrl) // reconnect if a prior turn dropped the socket
+                client.sendStart(patientId, AudioRecorder.SAMPLE_RATE)
+                preRoll.forEach { client.sendAudio(it, it.size) }
+                preRoll.clear()
+                client.sendAudio(chunk, len)
+                _state.value = _state.value.copy(phase = Phase.Capturing, level = level(rms))
+            }
+
+            VoiceActivityDetector.Event.NONE -> {
+                if (phase == Phase.Capturing) client.sendAudio(chunk, len)
+                _state.value = _state.value.copy(level = level(rms))
+            }
+
+            VoiceActivityDetector.Event.END -> {
+                client.sendAudio(chunk, len) // include the trailing frame
+                client.sendEnd()
+                _state.value = _state.value.copy(phase = Phase.Thinking, level = 0f)
+                startWatchdog()
+            }
+        }
+    }
+
+    /** Re-arm for the next utterance (keeps the session and socket alive). */
+    private fun reArm() {
+        watchdog?.cancel()
+        if (!enabled) return
+        vad.reset()
+        preRoll.clear()
+        _state.value = _state.value.copy(phase = Phase.Listening, level = 0f)
+    }
+
+    private fun startWatchdog() {
+        watchdog?.cancel()
+        watchdog = scope.launch {
+            delay(WATCHDOG_MS)
+            if (_state.value.phase == Phase.Thinking) {
+                Log.w(TAG, "watchdog: no reply, re-arming")
+                _state.value = _state.value.copy(error = "No response from server")
+                reArm()
+            }
+        }
+    }
+
     private fun stopPlayback() {
         player?.stop()
         player = null
     }
 
+    private fun rms(buf: ByteArray, len: Int): Double {
+        if (len < 2) return 0.0
+        var sum = 0.0
+        var i = 0
+        val n = len / 2
+        while (i < len - 1) {
+            val lo = buf[i].toInt() and 0xff
+            val hi = buf[i + 1].toInt() // sign-extends -> signed 16-bit sample
+            val s = (hi shl 8) or lo
+            sum += (s * s).toDouble()
+            i += 2
+        }
+        return sqrt(sum / n)
+    }
+
+    private fun level(rms: Double): Float = min(1.0, rms / 3000.0).toFloat()
+
     // --- VoiceStreamClient.Listener (called on OkHttp's reader thread) ---------
 
-    override fun onOpen() { /* state already advanced by the caller */ }
+    override fun onOpen() { /* utterance state is driven by the VAD, not by open */ }
 
     override fun onTranscript(text: String) {
-        _state.value = _state.value.copy(
-            transcript = text,
-            // Empty transcript = silence/no speech detected; the turn is over.
-            phase = if (text.isBlank()) Phase.Idle else _state.value.phase,
-        )
+        watchdog?.cancel()
+        _state.value = _state.value.copy(transcript = text)
+        if (text.isBlank()) reArm() // false trigger / no speech recognised
     }
 
     override fun onReply(text: String, route: String) {
-        _state.value = _state.value.copy(
-            reply = text,
-            phase = if (text.isBlank()) Phase.Idle else _state.value.phase,
-        )
+        _state.value = _state.value.copy(reply = text)
+        if (text.isBlank()) reArm()
     }
 
     override fun onTtsBegin(sampleRate: Int) {
+        watchdog?.cancel()
         stopPlayback()
         player = AudioPlayer(sampleRate).also { it.start() }
-        _state.value = _state.value.copy(phase = Phase.Speaking)
+        _state.value = _state.value.copy(phase = Phase.Speaking, level = 0f)
     }
 
     override fun onAudio(pcm: ByteArray) {
@@ -150,23 +239,24 @@ class VoiceSession(
 
     override fun onTtsEnd() {
         stopPlayback()
-        _state.value = _state.value.copy(phase = Phase.Idle)
+        reArm()
     }
 
     override fun onError(message: String) {
         Log.w(TAG, "onError: $message")
-        recorder.stop()
         stopPlayback()
-        _state.value = _state.value.copy(phase = Phase.Idle, error = message)
+        _state.value = _state.value.copy(error = message)
+        reArm()
     }
 
     override fun onClosed() {
-        if (_state.value.phase != Phase.Idle) {
-            _state.value = _state.value.copy(phase = Phase.Idle)
-        }
+        // Socket dropped; the next detected utterance will reconnect.
+        if (enabled && _state.value.phase != Phase.Off) reArm()
     }
 
     private companion object {
         const val TAG = "GuardianVoice"
+        const val PRE_ROLL_FRAMES = 8 // ~320 ms of audio before the VAD fires
+        const val WATCHDOG_MS = 15_000L
     }
 }

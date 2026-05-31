@@ -71,8 +71,7 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
         Screen.Monitor -> MainScreen(
             state = state,
             voice = voice,
-            onTalkStart = vm::startTalking,
-            onTalkStop = vm::stopTalking,
+            onVoiceEnabledChange = vm::setVoiceEnabled,
             onToggleMonitoring = { on -> if (on) vm.startMonitoring() else vm.stopMonitoring() },
             onSyncNow = vm::syncNow,
             onTestFall = vm::simulateFall,

@@ -117,10 +117,8 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Push-to-talk: press to start streaming the mic, release to get a spoken reply. */
-    fun startTalking() = voice.startTalking()
-
-    fun stopTalking() = voice.stopTalking()
+    /** Hands-free voice: when on, the watch listens and streams when speech is detected. */
+    fun setVoiceEnabled(on: Boolean) = voice.setEnabled(on)
 
     override fun onCleared() {
         voice.shutdown()

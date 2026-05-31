@@ -1,21 +1,15 @@
 package com.guardian.watch.ui
 
 import android.text.format.DateUtils
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.guardian.watch.voice.VoiceSession
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
@@ -38,8 +32,7 @@ import kotlin.math.roundToInt
 fun MainScreen(
     state: MonitorUiState,
     voice: VoiceSession.UiState,
-    onTalkStart: () -> Unit,
-    onTalkStop: () -> Unit,
+    onVoiceEnabledChange: (Boolean) -> Unit,
     onToggleMonitoring: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
     onTestFall: () -> Unit,
@@ -58,7 +51,7 @@ fun MainScreen(
         ) {
             item { Text(text = "Guardian", style = MaterialTheme.typography.title3) }
 
-            item { TalkButton(voice = voice, onStart = onTalkStart, onStop = onTalkStop) }
+            item { VoiceToggle(voice = voice, onEnabledChange = onVoiceEnabledChange) }
 
             item {
                 Metric(
@@ -166,58 +159,40 @@ fun MainScreen(
 }
 
 /**
- * Press-and-hold to talk. Holding streams the mic to the backend; releasing asks
- * for a spoken reply, which plays back automatically. The subtitle reflects the
- * live phase and shows the last transcript/reply so the wearer has visual
- * confirmation of what was heard and said.
+ * Hands-free voice toggle. When on, the watch listens continuously and streams to
+ * the backend only while it detects speech (on-device VAD), then plays the spoken
+ * reply. The secondary label reflects the live phase and the last thing heard/said.
  */
 @Composable
-private fun TalkButton(
+private fun VoiceToggle(
     voice: VoiceSession.UiState,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
+    onEnabledChange: (Boolean) -> Unit,
 ) {
-    val label = when (voice.phase) {
-        VoiceSession.Phase.Idle -> "Hold to talk"
-        VoiceSession.Phase.Connecting -> "Connecting…"
-        VoiceSession.Phase.Listening -> "Listening…"
+    val enabled = voice.phase != VoiceSession.Phase.Off
+    val status = when (voice.phase) {
+        VoiceSession.Phase.Off -> "Tap to talk hands-free"
+        VoiceSession.Phase.Listening -> "Listening for you…"
+        VoiceSession.Phase.Capturing -> "Hearing you…"
         VoiceSession.Phase.Thinking -> "Thinking…"
         VoiceSession.Phase.Speaking -> "Speaking…"
     }
-    val subtitle = voice.error
-        ?: voice.reply.ifBlank { voice.transcript }.takeIf { it.isNotBlank() }
+    val detail = voice.reply.ifBlank { voice.transcript }.takeIf { it.isNotBlank() }
+        ?: voice.error
+        ?: status
 
-    val active = voice.phase != VoiceSession.Phase.Idle
-    val bg = if (active) MaterialTheme.colors.primary else MaterialTheme.colors.surface
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(bg)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        onStart()
-                        tryAwaitRelease()
-                        onStop()
-                    },
-                )
-            }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(label, style = MaterialTheme.typography.button)
-        if (subtitle != null) {
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.caption2,
-                color = MaterialTheme.colors.onSurfaceVariant,
-                textAlign = TextAlign.Center,
+    ToggleChip(
+        checked = enabled,
+        onCheckedChange = onEnabledChange,
+        label = { Text("Voice assistant") },
+        secondaryLabel = { Text(detail) },
+        toggleControl = {
+            Icon(
+                imageVector = ToggleChipDefaults.switchIcon(enabled),
+                contentDescription = if (enabled) "On" else "Off",
             )
-        }
-    }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
