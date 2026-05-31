@@ -13,23 +13,42 @@ export const DEFAULT_PATIENT_ID = Number(
 );
 
 /**
- * The patient the UI is currently viewing. Persisted in localStorage so the
- * choice survives reloads and is shared across tabs. Falls back to
- * DEFAULT_PATIENT_ID on the server (no window) or when nothing is stored yet.
+ * The "logged-in" patient — the active profile session. Persisted in
+ * localStorage so it survives reloads and is shared across tabs. Returns `null`
+ * when no profile is selected (logged out) or on the server, which is how the
+ * SessionGate decides whether to show the app or the profile-selection screen.
  */
-export function getActivePatientId(): number {
-  if (typeof window === "undefined") return DEFAULT_PATIENT_ID;
+export function getActivePatientId(): number | null {
+  if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(ACTIVE_PATIENT_KEY);
   const id = raw === null ? NaN : Number(raw);
-  return Number.isFinite(id) && id > 0 ? id : DEFAULT_PATIENT_ID;
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-/** Switch the active patient and notify listeners (see ACTIVE_PATIENT_CHANGED_EVENT). */
+/**
+ * The active patient id for data fetching, falling back to DEFAULT_PATIENT_ID.
+ * Use this for API calls (which only fire once a profile is active); use
+ * getActivePatientId() for session/auth-style logic that must see "logged out".
+ */
+export function resolveActivePatientId(): number {
+  return getActivePatientId() ?? DEFAULT_PATIENT_ID;
+}
+
+/** Select the active patient (log in) and notify listeners. */
 export function setActivePatientId(id: number): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(ACTIVE_PATIENT_KEY, String(id));
   window.dispatchEvent(
     new CustomEvent(ACTIVE_PATIENT_CHANGED_EVENT, { detail: id }),
+  );
+}
+
+/** Clear the active patient (log out) and notify listeners. */
+export function clearActivePatientId(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(ACTIVE_PATIENT_KEY);
+  window.dispatchEvent(
+    new CustomEvent(ACTIVE_PATIENT_CHANGED_EVENT, { detail: null }),
   );
 }
 

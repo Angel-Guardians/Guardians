@@ -18,13 +18,13 @@ import { PingButton } from "@/components/ping-button";
 import { useEventStream, type StreamStatus } from "@/hooks/useEventStream";
 import { api } from "@/lib/api";
 import {
-  getActivePatientId,
   profileInitials,
+  resolveActivePatientId,
 } from "@/lib/profile-storage";
 import type { LocationPoint, Medication, PatientProfile, VitalPoint } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const PATIENT_ID = getActivePatientId();
+const PATIENT_ID = resolveActivePatientId();
 
 interface SectionCardProps {
   href: string;

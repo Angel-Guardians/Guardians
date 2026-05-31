@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { AppHeader } from "@/components/app-header";
-import { FallAlerts } from "@/components/fall-alerts";
+import { SessionGate } from "@/components/session-gate";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -34,13 +33,7 @@ export default function RootLayout({
     >
       <body className="min-h-full bg-background">
         <ThemeProvider>
-          <div className="flex min-h-screen flex-col">
-            <AppHeader />
-            <FallAlerts />
-            <main className="flex-1 overflow-x-hidden px-6 py-8 md:px-10 md:py-10">
-              <div className="mx-auto max-w-6xl">{children}</div>
-            </main>
-          </div>
+          <SessionGate>{children}</SessionGate>
         </ThemeProvider>
       </body>
     </html>
