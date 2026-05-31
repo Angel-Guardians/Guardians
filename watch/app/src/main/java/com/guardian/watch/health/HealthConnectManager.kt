@@ -3,6 +3,7 @@ package com.guardian.watch.health
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
@@ -30,6 +31,7 @@ class HealthConnectManager(private val context: Context) {
 
     /** The read permissions Health Connect must grant before any record is returned. */
     val permissions: Set<String> = setOf(
+        HealthPermission.getReadPermission(HeartRateRecord::class),
         HealthPermission.getReadPermission(OxygenSaturationRecord::class),
         HealthPermission.getReadPermission(RestingHeartRateRecord::class),
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),

@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
     <!-- Steps / calories -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Push-to-talk voice streaming to the backend -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Ongoing-monitoring notification (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -38,6 +40,8 @@
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <!-- Live heart rate via Health Services (Wear OS 5 enforces this permission) -->
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
 
     <application
         android:name=".GuardianWatchApp"

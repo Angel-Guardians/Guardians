@@ -35,6 +35,10 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = app.graph
     private val repo = graph.repository
     private val settings = graph.settings
+    private val voice = graph.voiceSession
+
+    /** Push-to-talk voice state (transcript, reply, current phase). */
+    val voiceState = voice.state
 
     private val vitals = combine(
         repo.latest("hr"),
@@ -111,6 +115,16 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
             settings.setBaseUrl(baseUrl)
             settings.setPatientId(patientId)
         }
+    }
+
+    /** Push-to-talk: press to start streaming the mic, release to get a spoken reply. */
+    fun startTalking() = voice.startTalking()
+
+    fun stopTalking() = voice.stopTalking()
+
+    override fun onCleared() {
+        voice.shutdown()
+        super.onCleared()
     }
 
     /** Demo/QA: fire a fall straight at the server to test the alert pipeline. */

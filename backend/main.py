@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from backend.api import admin, events_sse, lab_records, location, patient, turn, vitals
+from backend.api import admin, events_sse, lab_records, location, patient, turn, vitals, voice
 from backend.config import settings
 from backend.events.bus import EventBus
 from backend.logging import configure_logging
@@ -75,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(lab_records.router, prefix="/lab-records", tags=["lab-records"])
     app.include_router(events_sse.router, prefix="/events", tags=["events"])
     app.include_router(turn.router, prefix="/turn", tags=["turn"])
+    app.include_router(voice.router, prefix="/voice", tags=["voice"])
 
     import os, pathlib
     audio_dir = pathlib.Path(__file__).parent / "static" / "audio"

@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
 
+    # Text-to-speech for the voice WebSocket (OpenAI; needs the real OpenAI endpoint
+    # via OPENAI_API_KEY below). voice can be overridden per-turn by the specialist.
+    tts_model: str = "gpt-4o-mini-tts"
+    tts_voice: str = "alloy"
+
     # LLM (LEGACY — NOT used by the live conversational path).
     # The running app configures its model in backend/llm/config.py via LLM_* env
     # vars (one model behind the provider-neutral seam). These per-role fields are

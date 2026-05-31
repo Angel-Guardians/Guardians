@@ -38,6 +38,7 @@ private enum class Screen { Monitor, Settings }
 @Composable
 private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
     val state by vm.uiState.collectAsState()
+    val voice by vm.voiceState.collectAsState()
     var screen by remember { mutableStateOf(Screen.Monitor) }
 
     val context = LocalContext.current
@@ -69,6 +70,9 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
     when (screen) {
         Screen.Monitor -> MainScreen(
             state = state,
+            voice = voice,
+            onTalkStart = vm::startTalking,
+            onTalkStop = vm::stopTalking,
             onToggleMonitoring = { on -> if (on) vm.startMonitoring() else vm.stopMonitoring() },
             onSyncNow = vm::syncNow,
             onTestFall = vm::simulateFall,
@@ -87,6 +91,7 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
 private fun requiredPermissions(): Array<String> = buildList {
     add(Manifest.permission.BODY_SENSORS)
     add(Manifest.permission.ACTIVITY_RECOGNITION)
+    add(Manifest.permission.RECORD_AUDIO)
     add(Manifest.permission.ACCESS_FINE_LOCATION)
     add(Manifest.permission.ACCESS_COARSE_LOCATION)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
