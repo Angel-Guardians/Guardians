@@ -30,6 +30,7 @@ from backend.api.schemas import (
 )
 from backend.config import settings
 from backend.db.models import LabObservation, LabReport
+from backend.services.medical_history_extract import extract_and_apply_profile
 from backend.tools.integrations.lifelabs_pdf import (
     ParsedLabReport,
     PdfParseError,
@@ -64,8 +65,16 @@ def ingest_lab_pdf(
     data: bytes,
     source: str = "lifelabs_upload",
     external_id: str | None = None,
+    apply_to_profile: bool = False,
 ) -> LabUploadResult:
-    """Store a results PDF and its parsed observations. Idempotent per patient."""
+    """Store a results PDF and its parsed observations. Idempotent per patient.
+
+    When ``apply_to_profile`` is set, the document's extracted text is also sent
+    to the LLM to pull patient-profile fields (name/age/conditions/allergies/
+    medications) which are merged additively into the profile. This is how a
+    free-form *medical history* PDF — which has no lab tables to parse — still
+    enriches the record. Extraction failures are non-fatal.
+    """
     sha256 = hashlib.sha256(data).hexdigest()
 
     existing = session.exec(
@@ -136,11 +145,22 @@ def ingest_lab_pdf(
 
     session.commit()
     session.refresh(report)
+
+    # Free-form medical-history docs carry no lab tables, so structured parsing
+    # above yields nothing — the LLM pass is what turns their prose into profile
+    # fields. Run it after the report is safely persisted.
+    profile_summary = None
+    if apply_to_profile:
+        profile_summary = extract_and_apply_profile(
+            session, patient_id=patient_id, raw_text=(parsed.raw_text if parsed else None)
+        )
+
     return LabUploadResult(
         report_id=report.id,
         observations=(len(parsed.observations) if parsed else 0),
         duplicate=False,
         status=status,
+        profile=profile_summary,
     )
 
 

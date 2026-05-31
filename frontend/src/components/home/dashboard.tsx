@@ -4,7 +4,9 @@ import {
   Activity,
   ArrowRight,
   BellRing,
+  FileText,
   HeartPulse,
+  MapPin,
   Radio,
   UserRound,
 } from "lucide-react";
@@ -19,7 +21,7 @@ import {
   DEFAULT_PATIENT_ID,
   profileInitials,
 } from "@/lib/profile-storage";
-import type { Medication, PatientProfile, VitalPoint } from "@/lib/types";
+import type { LocationPoint, Medication, PatientProfile, VitalPoint } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const PATIENT_ID = DEFAULT_PATIENT_ID;
@@ -44,8 +46,8 @@ function SectionCard({
   footer,
 }: SectionCardProps) {
   return (
-    <Link href={href} className="group block h-full">
-      <article className="flex h-full flex-col rounded-2xl border border-border/80 bg-card p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md">
+    <article className="flex h-full flex-col rounded-2xl border border-border/80 bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md">
+      <Link href={href} className="group flex flex-1 flex-col p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", iconBg)}>
             {icon}
@@ -57,11 +59,11 @@ function SectionCard({
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="flex-1 space-y-2">{children}</div>
-        {footer ? (
-          <div className="mt-4 border-t border-border/60 pt-3">{footer}</div>
-        ) : null}
-      </article>
-    </Link>
+      </Link>
+      {footer ? (
+        <div className="border-t border-border/60 px-5 pb-5 pt-3">{footer}</div>
+      ) : null}
+    </article>
   );
 }
 
@@ -316,6 +318,58 @@ function RemindersSummary() {
   );
 }
 
+function LocationSummary() {
+  const [latest, setLatest] = useState<LocationPoint | null>(null);
+  const [pointCount, setPointCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getLocations()
+      .then((points) => {
+        if (!active) return;
+        setLatest(points[0] ?? null);
+        setPointCount(points.length);
+      })
+      .catch(() => active && setLatest(null))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading location…</p>;
+  }
+
+  if (!latest) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No GPS fix yet. Positions appear once the watch is monitoring outdoors or
+        near a window.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <p className="font-mono text-lg font-semibold tabular-nums">
+        {latest.lat.toFixed(5)}, {latest.lng.toFixed(5)}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {latest.accuracy != null ? (
+          <Badge variant="outline">±{Math.round(latest.accuracy)} m</Badge>
+        ) : null}
+        {pointCount > 0 ? (
+          <Badge variant="secondary">{pointCount} points (24h)</Badge>
+        ) : null}
+      </div>
+      <p className="text-xs text-muted-foreground">Updated {fmtTime(latest.ts)}</p>
+    </>
+  );
+}
+
 export function Dashboard() {
   return (
     <div className="space-y-10">
@@ -365,6 +419,38 @@ export function Dashboard() {
           description="Today's medications and check-ins"
         >
           <RemindersSummary />
+        </SectionCard>
+
+        <SectionCard
+          href="/location"
+          icon={<MapPin className="size-5 text-emerald-700 dark:text-emerald-300" />}
+          iconBg="bg-emerald-500/10"
+          title="Location"
+          description="GPS track from the wearable — last 24 hours"
+          footer={
+            <Link
+              href="/location-map.html"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              <MapPin className="size-3.5" />
+              View live map
+            </Link>
+          }
+        >
+          <LocationSummary />
+        </SectionCard>
+
+        <SectionCard
+          href="/medical-history"
+          icon={<FileText className="size-5 text-violet-700 dark:text-violet-300" />}
+          iconBg="bg-violet-500/10"
+          title="Medical history"
+          description="Upload lab PDFs — Guardian extracts the results"
+        >
+          <p className="text-sm text-muted-foreground">
+            Drop in a lab results PDF and we&apos;ll pull out the test values
+            automatically.
+          </p>
         </SectionCard>
       </div>
 

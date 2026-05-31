@@ -8,18 +8,30 @@
   <style>
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; }
     #bar {
       padding: 10px 16px; background: #0f172a; color: #e2e8f0; font-size: 14px;
-      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
     }
+    #nav { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
+    #nav a { color: #93c5fd; text-decoration: none; font-weight: 500; }
+    #nav a:hover { color: #bfdbfe; text-decoration: underline; }
     #bar b { color: #fff; }
-    #bar a { color: #60a5fa; }
-    #dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; }
-    #map { height: calc(100% - 44px); width: 100%; background: #1e293b; }
+    #bar a.ext { color: #60a5fa; }
+    #dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; flex-shrink: 0; }
+    #status { flex: 1; min-width: 12rem; }
+    #map { flex: 1; width: 100%; min-height: 0; background: #1e293b; }
   </style>
 </head>
 <body>
-  <div id="bar"><span id="dot"></span><span id="status">Loading…</span></div>
+  <div id="bar">
+    <nav id="nav">
+      <a href="/">← Dashboard</a>
+      <a href="/location">Location details</a>
+    </nav>
+    <span id="dot"></span>
+    <span id="status">Loading…</span>
+  </div>
   <div id="map"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -69,7 +81,7 @@
         const g = `https://www.google.com/maps?q=${latest.lat},${latest.lng}`;
         status.innerHTML =
           `Latest: <b>${latest.lat.toFixed(5)}, ${latest.lng.toFixed(5)}</b> · ${acc} · ${fmt(latest.ts)} · ` +
-          `${points.length} point(s) · <a href="${g}" target="_blank" rel="noreferrer">Open in Google Maps</a>`;
+          `${points.length} point(s) · <a class="ext" href="${g}" target="_blank" rel="noreferrer">Open in Google Maps</a>`;
       } catch (e) {
         status.textContent = "Cannot reach backend at " + BACKEND + " — " + e.message;
       }

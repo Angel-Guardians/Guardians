@@ -166,8 +166,25 @@ class LabReportDetail(LabReportRead):
     observations: list[LabObservationRead] = Field(default_factory=list)
 
 
+class MedicalHistoryExtraction(BaseModel):
+    """Summary of what the LLM extracted from a document and merged into the
+    patient profile. Only fields actually present in the document are filled."""
+
+    applied: bool = False
+    name: str | None = None  # set only if the profile name was previously empty
+    age: int | None = None  # set only if the profile age was previously empty
+    conditions_added: list[str] = Field(default_factory=list)
+    allergies_added: list[str] = Field(default_factory=list)
+    medications_added: list[str] = Field(default_factory=list)
+    notes_added: bool = False
+    error: str | None = None  # set when extraction was attempted but failed
+
+
 class LabUploadResult(BaseModel):
     report_id: int
     observations: int
     duplicate: bool = False
     status: str
+    # LLM extraction of profile fields (name/age/conditions/allergies/meds) from
+    # the document text, merged into the patient profile. None when not attempted.
+    profile: MedicalHistoryExtraction | None = None

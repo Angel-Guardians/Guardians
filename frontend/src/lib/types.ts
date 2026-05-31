@@ -82,6 +82,13 @@ export interface FallEvent {
   source: string;
 }
 
+export interface LocationPoint {
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+  ts: string; // ISO timestamp (UTC)
+}
+
 export interface Medication {
   id: number;
   name: string;
@@ -90,12 +97,75 @@ export interface Medication {
   taken: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Lab / medical-history records — uploaded PDF documents + parsed rows.
+// Mirrors backend/api/schemas.py (LabReportRead / LabReportDetail / ...).
+// ---------------------------------------------------------------------------
+
+export interface LabObservation {
+  id: number;
+  test_name: string;
+  value_text?: string | null;
+  value_num?: number | null;
+  unit?: string | null;
+  reference_range?: string | null;
+  flag?: string | null;
+  category?: string | null;
+  observed_at?: string | null;
+}
+
+export interface LabReport {
+  id: number;
+  patient_id: number;
+  source: string;
+  lab_name?: string | null;
+  ordering_provider?: string | null;
+  collected_at?: string | null;
+  reported_at?: string | null;
+  document_filename?: string | null;
+  status: string; // "parsed" | "raw_only" | "needs_review"
+  created_at: string;
+  observation_count: number;
+}
+
+export interface LabReportDetail extends LabReport {
+  raw_text?: string | null;
+  observations: LabObservation[];
+}
+
+// Summary of profile fields the LLM extracted from an uploaded document and
+// merged into the patient profile. Only fields present in the document are filled.
+export interface MedicalHistoryExtraction {
+  applied: boolean;
+  name?: string | null;
+  age?: number | null;
+  conditions_added: string[];
+  allergies_added: string[];
+  medications_added: string[];
+  notes_added: boolean;
+  error?: string | null;
+}
+
+export interface LabUploadResult {
+  report_id: number;
+  observations: number;
+  duplicate: boolean;
+  status: string;
+  profile?: MedicalHistoryExtraction | null;
+}
+
 export interface AdminTable {
   name: string;
   count: number;
   rows: Record<string, unknown>[];
+  clearable: boolean;
 }
 
 export interface AdminTablesResponse {
   tables: AdminTable[];
+}
+
+export interface AdminClearResult {
+  table: string;
+  deleted: number;
 }

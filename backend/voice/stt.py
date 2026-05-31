@@ -67,11 +67,14 @@ def _try_faster_whisper(pcm: bytes, sample_rate: int) -> str | None:
 
 def _try_openai(pcm: bytes, sample_rate: int) -> str | None:
     """Transcribe via OpenAI Whisper, or None if no key is configured."""
-    if not settings.openai_api_key:
+    from backend.voice.openai_creds import openai_api_key
+
+    key = openai_api_key()
+    if not key:
         return None
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(api_key=key)
     wav = _pcm_to_wav(pcm, sample_rate)
     # The SDK keys off the filename's extension to set the content type.
     file_tuple = ("utterance.wav", wav, "audio/wav")

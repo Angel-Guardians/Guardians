@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
@@ -25,7 +25,15 @@ function formatCell(value: unknown): string {
   return String(value);
 }
 
-function TableSection({ table }: { table: AdminTable }) {
+function TableSection({
+  table,
+  clearing,
+  onClear,
+}: {
+  table: AdminTable;
+  clearing: boolean;
+  onClear: (tableName: string) => void;
+}) {
   const [open, setOpen] = useState(table.count > 0);
   const columns =
     table.rows.length > 0 ? Object.keys(table.rows[0]) : [];
@@ -43,9 +51,26 @@ function TableSection({ table }: { table: AdminTable }) {
             />
             <CardTitle className="font-mono text-base">{table.name}</CardTitle>
           </div>
-          <Badge variant={table.count > 0 ? "secondary" : "outline"}>
-            {table.count} {table.count === 1 ? "row" : "rows"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {table.clearable && table.count > 0 ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="xs"
+                disabled={clearing}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClear(table.name);
+                }}
+              >
+                <Trash2 />
+                Clear
+              </Button>
+            ) : null}
+            <Badge variant={table.count > 0 ? "secondary" : "outline"}>
+              {table.count} {table.count === 1 ? "row" : "rows"}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       {open ? (
@@ -97,6 +122,7 @@ export default function AdminPage() {
   const [tables, setTables] = useState<AdminTable[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,13 +142,36 @@ export default function AdminPage() {
     void load();
   }, [load]);
 
+  const clearTable = useCallback(
+    async (tableName: string) => {
+      const table = tables?.find((t) => t.name === tableName);
+      if (!table) return;
+      const ok = window.confirm(
+        `Clear all ${table.count} row(s) from "${tableName}"? This cannot be undone.`,
+      );
+      if (!ok) return;
+
+      setClearing(true);
+      setError(null);
+      try {
+        await api.clearAdminTable(tableName);
+        await load();
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to clear table");
+      } finally {
+        setClearing(false);
+      }
+    },
+    [load, tables],
+  );
+
   const totalRows = tables?.reduce((sum, t) => sum + t.count, 0) ?? 0;
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Admin"
-        description="Browse database tables and inspect stored records."
+        description="Browse database tables, inspect stored records, and clear history tables for QA resets."
         action={
           <Button variant="outline" size="sm" disabled={loading} onClick={() => void load()}>
             <RefreshCw className={cn("size-4", loading && "animate-spin")} />
@@ -149,7 +198,12 @@ export default function AdminPage() {
           </div>
           <div className="space-y-4">
             {tables.map((table) => (
-              <TableSection key={table.name} table={table} />
+              <TableSection
+                key={table.name}
+                table={table}
+                clearing={clearing}
+                onClear={(name) => void clearTable(name)}
+              />
             ))}
           </div>
         </>

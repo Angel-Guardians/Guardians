@@ -4,8 +4,13 @@
 // GET /health, GET /events/sse. Vitals/medication schedule endpoints still TODO.
 
 import type {
+  AdminClearResult,
   AdminTablesResponse,
   FallEvent,
+  LocationPoint,
+  LabReport,
+  LabReportDetail,
+  LabUploadResult,
   Medication,
   Patient,
   PatientProfile,
@@ -51,12 +56,32 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   return sendJson<T>(path, { method: "GET", ...init });
 }
 
+// Multipart POST. We deliberately do NOT set Content-Type — the browser adds it
+// with the correct multipart boundary once the FormData body is attached.
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+    body: form,
+  });
+  if (!res.ok) {
+    throw new ApiError(`POST ${path} -> ${res.status}`, res.status);
+  }
+  return (await res.json()) as T;
+}
+
 export const api = {
   health: () => getJson<{ status: string }>("/health"),
   ping: () => getJson<{ message: string }>("/ping"),
 
   getAdminTables: (limit = 50) =>
     getJson<AdminTablesResponse>(`/admin/tables?limit=${limit}`),
+
+  clearAdminTable: (tableName: string) =>
+    sendJson<AdminClearResult>(`/admin/tables/${encodeURIComponent(tableName)}`, {
+      method: "DELETE",
+    }),
 
   listPatients: () => getJson<Patient[]>("/patient/"),
   getPatient: (id: number) => getJson<Patient>(`/patient/${id}`),
@@ -82,6 +107,30 @@ export const api = {
 
   // Recent fall events from the watch (newest first).
   getFalls: (since = "24h") => getJson<FallEvent[]>(`/vitals/falls?since=${since}`),
+
+  // GPS track from the wearable (newest first).
+  getLocations: (since = "24h", patientId: number = DEFAULT_PATIENT_ID) =>
+    getJson<LocationPoint[]>(`/location?since=${since}&patient_id=${patientId}`),
+
+  // Medical history: upload a results PDF; the backend parses it and stores the
+  // document + extracted observation rows. Returns the parse summary.
+  uploadLabRecord: (
+    file: File,
+    patientId: number = DEFAULT_PATIENT_ID,
+    source = "lifelabs_upload",
+  ) => {
+    const form = new FormData();
+    form.append("patient_id", String(patientId));
+    form.append("source", source);
+    form.append("file", file);
+    return postForm<LabUploadResult>("/lab-records/upload", form);
+  },
+
+  listLabRecords: (patientId: number = DEFAULT_PATIENT_ID) =>
+    getJson<LabReport[]>(`/lab-records?patient_id=${patientId}`),
+
+  getLabRecord: (reportId: number) =>
+    getJson<LabReportDetail>(`/lab-records/${reportId}`),
 
   // TODO(backend): GET /medications?patient_id= not implemented yet.
   listMedications: (patientId: number) =>

@@ -45,12 +45,16 @@ def synthesize_pcm(text: str, voice: str | None = None) -> Iterator[bytes]:
     """
     if not text.strip():
         return
-    if not settings.openai_api_key:
+
+    from backend.voice.openai_creds import openai_api_key
+
+    key = openai_api_key()
+    if not key:
         raise RuntimeError("No text-to-speech backend available: set OPENAI_API_KEY.")
 
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(api_key=key)
     with client.audio.speech.with_streaming_response.create(
         model=settings.tts_model,
         voice=voice or settings.tts_voice or _DEFAULT_VOICE,

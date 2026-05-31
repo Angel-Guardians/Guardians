@@ -60,6 +60,7 @@ def upload_lab_pdf(
         content_type=file.content_type or "application/pdf",
         data=data,
         source=source,
+        apply_to_profile=True,
     )
 
 
