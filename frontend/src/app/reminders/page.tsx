@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { resolveActivePatientId } from "@/lib/profile-storage";
 import type { Medication } from "@/lib/types";
 
-const PATIENT_ID = 1;
+const PATIENT_ID = resolveActivePatientId();
 
 type LoadState =
   | { status: "loading" }

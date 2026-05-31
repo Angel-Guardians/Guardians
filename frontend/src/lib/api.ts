@@ -18,7 +18,7 @@ import type {
   VitalKind,
   VitalSeries,
 } from "@/lib/types";
-import { DEFAULT_PATIENT_ID } from "@/lib/profile-storage";
+import { resolveActivePatientId } from "@/lib/profile-storage";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -85,7 +85,12 @@ export const api = {
 
   listPatients: () => getJson<Patient[]>("/patient/"),
   getPatient: (id: number) => getJson<Patient>(`/patient/${id}`),
-  getPatientProfile: (id: number = DEFAULT_PATIENT_ID) =>
+  createPatient: (profile: PatientProfileUpdate) =>
+    sendJson<PatientProfile>("/patient/", {
+      method: "POST",
+      body: JSON.stringify(profile),
+    }),
+  getPatientProfile: (id: number = resolveActivePatientId()) =>
     getJson<PatientProfile>(`/patient/${id}/profile`),
   updatePatientProfile: (id: number, profile: PatientProfileUpdate) =>
     sendJson<PatientProfile>(`/patient/${id}/profile`, {
@@ -95,7 +100,7 @@ export const api = {
 
   // Send one conversational turn to Guardian. The reply + routing + tool calls
   // are also streamed onto GET /events/sse, so the Live page updates in real time.
-  turn: (text: string, patientId: number = DEFAULT_PATIENT_ID) =>
+  turn: (text: string, patientId: number = resolveActivePatientId()) =>
     sendJson<{ route: string; reply: string; tool_calls: Record<string, unknown>[] }>(
       "/turn/",
       { method: "POST", body: JSON.stringify({ text, patient_id: patientId }) },
@@ -109,14 +114,14 @@ export const api = {
   getFalls: (since = "24h") => getJson<FallEvent[]>(`/vitals/falls?since=${since}`),
 
   // GPS track from the wearable (newest first).
-  getLocations: (since = "24h", patientId: number = DEFAULT_PATIENT_ID) =>
+  getLocations: (since = "24h", patientId: number = resolveActivePatientId()) =>
     getJson<LocationPoint[]>(`/location?since=${since}&patient_id=${patientId}`),
 
   // Medical history: upload a results PDF; the backend parses it and stores the
   // document + extracted observation rows. Returns the parse summary.
   uploadLabRecord: (
     file: File,
-    patientId: number = DEFAULT_PATIENT_ID,
+    patientId: number = resolveActivePatientId(),
     source = "lifelabs_upload",
   ) => {
     const form = new FormData();
@@ -126,7 +131,7 @@ export const api = {
     return postForm<LabUploadResult>("/lab-records/upload", form);
   },
 
-  listLabRecords: (patientId: number = DEFAULT_PATIENT_ID) =>
+  listLabRecords: (patientId: number = resolveActivePatientId()) =>
     getJson<LabReport[]>(`/lab-records?patient_id=${patientId}`),
 
   getLabRecord: (reportId: number) =>

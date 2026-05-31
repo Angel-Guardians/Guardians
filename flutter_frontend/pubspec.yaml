@@ -1,0 +1,44 @@
+name: guardian_app
+description: "Guardian — a calm, friendly companion app for monitoring and caring for a loved one."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Networking
+  http: ^1.2.2
+
+  # State management
+  provider: ^6.1.2
+
+  # Charts for vitals
+  fl_chart: ^0.69.2
+
+  # Date / number formatting
+  intl: ^0.19.0
+
+  # Local persistence (active patient, backend url)
+  shared_preferences: ^2.3.2
+
+  # PDF picking for medical-history upload
+  file_picker: ^8.1.4
+
+  # Open Google Maps for location
+  url_launcher: ^6.3.1
+
+  # Friendly typography (Inter, close to the web app's Geist)
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

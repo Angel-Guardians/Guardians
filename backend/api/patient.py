@@ -21,6 +21,37 @@ def list_patients(session: Session = Depends(get_session)) -> list[Patient]:
     return list(session.exec(select(Patient)).all())
 
 
+@router.post("/", response_model=PatientProfileRead, status_code=201)
+def create_patient(
+    body: PatientProfileWrite,
+    session: Session = Depends(get_session),
+) -> PatientProfileRead:
+    """Create a new patient profile.
+
+    Quick-create only needs name + age; the rest of `PatientProfileWrite`
+    (conditions, contacts, medications, …) is optional and can be filled in later
+    via PUT /patient/{id}/profile. Returns the full profile so the caller can
+    switch to the new patient immediately.
+    """
+    patient = Patient(
+        name=body.name,
+        age=body.age,
+        conditions=body.conditions,
+        allergies=body.allergies,
+        primary_language=body.primary_language,
+        location=body.location,
+        bio=body.bio,
+        notes=body.notes,
+    )
+    session.add(patient)
+    session.commit()
+    session.refresh(patient)
+    assert patient.id is not None
+    # Reuse the profile writer so any contacts/medications sent up are persisted
+    # through the same path as edits.
+    return update_patient_profile(session, patient.id, body)
+
+
 @router.get("/{patient_id}/profile", response_model=PatientProfileRead)
 def read_patient_profile(
     patient_id: int,

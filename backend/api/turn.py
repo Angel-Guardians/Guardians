@@ -87,6 +87,8 @@ async def take_turn(body: TurnRequest, request: Request) -> TurnResponse:
         await bus.publish(TranscriptEvent(source="api.turn", text=body.text))
 
     # Run the synchronous graph off the loop; steps stream live via `emit`.
-    result = await asyncio.to_thread(guardian.turn, body.text, emit)
+    # body.patient_id retargets the agent so the reply is grounded in the
+    # profile the UI currently has selected.
+    result = await asyncio.to_thread(guardian.turn, body.text, emit, body.patient_id)
 
     return TurnResponse(**result)

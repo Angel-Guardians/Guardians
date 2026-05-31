@@ -72,6 +72,7 @@ class GuardianAgent:
         self._registry = registry or build_default_registry()
         self._history: list[Message] = []
         self._last_route: str = "companion"
+        self._patient_id = patient_id
         self._agents = {
             "safety": SafetyAgent(self._llm, self._registry),
             "companion": CompanionAgent(self._llm, self._registry),
@@ -83,6 +84,20 @@ class GuardianAgent:
         self._load_patient_context(patient_id)
         # Compile the LangGraph orchestrator once.
         self._graph = build_guardian_graph(self.route, self._agents)
+
+    def set_patient(self, patient_id: int) -> None:
+        """Retarget the agent at a different patient.
+
+        Reloads the persona/context block for every specialist and clears the
+        running conversation history so a switch doesn't bleed one patient's turns
+        into another's. Cheap and idempotent — a no-op if already on this patient.
+        """
+        if patient_id == self._patient_id:
+            return
+        self._patient_id = patient_id
+        self._history.clear()
+        self._last_route = "companion"
+        self._load_patient_context(patient_id)
 
     def _load_patient_context(self, patient_id: int) -> None:
         from backend.agents.prompts._base import build_patient_context
@@ -133,7 +148,7 @@ class GuardianAgent:
     def chat(self, user_message: str) -> str:
         return self.turn(user_message)["reply"]
 
-    def turn(self, user_message: str, emit=None) -> dict:
+    def turn(self, user_message: str, emit=None, patient_id: int | None = None) -> dict:
         """One full turn. Returns {route, reply, tool_calls}.
 
         Tool calls are captured from the per-module audit logs the stubs append to
@@ -143,7 +158,12 @@ class GuardianAgent:
         `emit(kind, payload)` is an optional progress hook streamed step-by-step to
         the live dashboard (routing_decision -> tool_invocation -> agent_reply) as
         the graph runs, instead of all at once after the turn completes.
+
+        `patient_id` retargets the agent before the turn runs, so a single
+        long-lived GuardianAgent can serve whichever profile the UI has selected.
         """
+        if patient_id is not None:
+            self.set_patient(patient_id)
         from backend.tools import emergency, general_tools, health, reminder
 
         logs = (emergency.CALL_LOG, general_tools.CALL_LOG, health.CALL_LOG, reminder.CALL_LOG)

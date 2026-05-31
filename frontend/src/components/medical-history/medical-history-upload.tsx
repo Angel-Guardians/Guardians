@@ -30,7 +30,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api, ApiError } from "@/lib/api";
-import { DEFAULT_PATIENT_ID } from "@/lib/profile-storage";
 import type {
   LabReport,
   LabReportDetail,
@@ -241,7 +240,7 @@ export function MedicalHistoryUpload() {
   const loadRecords = useCallback(async () => {
     setRecordsLoading(true);
     try {
-      const list = await api.listLabRecords(DEFAULT_PATIENT_ID);
+      const list = await api.listLabRecords();
       setRecords(list);
     } catch {
       setRecords([]);
@@ -278,7 +277,7 @@ export function MedicalHistoryUpload() {
 
       setUploading(true);
       try {
-        const result = await api.uploadLabRecord(file, DEFAULT_PATIENT_ID);
+        const result = await api.uploadLabRecord(file);
         setDuplicate(result.duplicate);
         setExtraction(result.profile ?? null);
         // Pull the parsed report so we can show the extracted information.
