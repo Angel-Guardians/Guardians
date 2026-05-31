@@ -114,12 +114,16 @@ class GuardianAgent:
     def chat(self, user_message: str) -> str:
         return self.turn(user_message)["reply"]
 
-    def turn(self, user_message: str) -> dict:
+    def turn(self, user_message: str, emit=None) -> dict:
         """One full turn. Returns {route, reply, tool_calls}.
 
         Tool calls are captured from the per-module audit logs the stubs append to
         (see backend/tools/*). The API layer turns this dict into bus events so the
         Live page shows which specialist ran and which tools fired.
+
+        `emit(kind, payload)` is an optional progress hook streamed step-by-step to
+        the live dashboard (routing_decision -> tool_invocation -> agent_reply) as
+        the graph runs, instead of all at once after the turn completes.
         """
         from backend.tools import emergency, general_tools, health, reminder
 
@@ -130,7 +134,7 @@ class GuardianAgent:
         # Invoke the compiled graph for this turn. LangGraph traces the run to
         # LangSmith automatically when tracing env vars are set.
         result = self._graph.invoke(
-            {"user_message": user_message, "history": list(self._history)},
+            {"user_message": user_message, "history": list(self._history), "emit": emit},
             config={"run_name": "guardian-turn"},
         )
         reply = result["reply"]

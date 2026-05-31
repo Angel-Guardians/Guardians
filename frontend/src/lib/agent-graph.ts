@@ -11,6 +11,7 @@ export type NodeId =
   | "companion"
   | "behavior"
   | "caregiver"
+  | "call_person"
   | "call_911"
   | "notify_caregiver"
   | "find_cool_space"
@@ -46,11 +47,11 @@ export type AgentRoute = (typeof AGENT_ROUTES)[number];
 
 /** Tools each specialist may invoke (backend/agents/*.py tool_names). */
 export const TOOLS_BY_AGENT: Record<AgentRoute, NodeId[]> = {
-  safety: ["call_911", "notify_caregiver", "find_cool_space"],
+  safety: ["call_person", "find_cool_space"],
   health: ["log_vital", "get_medications", "recall_history", "find_cool_space"],
   reminder: ["get_schedule", "mark_med_taken", "recall_history"],
   companion: ["recall_history", "find_cool_space"],
-  behavior: ["notify_caregiver", "recall_history"],
+  behavior: ["call_person", "recall_history"],
   caregiver: ["notify_caregiver", "recall_history"],
 };
 
@@ -94,6 +95,7 @@ export const AGENT_GRAPH = {
       label: "Caregiver liaison",
       routeId: "caregiver",
     },
+    { id: "call_person", kind: "tool", label: "call_person" },
     { id: "call_911", kind: "tool", label: "call_911" },
     { id: "notify_caregiver", kind: "tool", label: "notify_caregiver" },
     { id: "find_cool_space", kind: "tool", label: "find_cool_space" },
@@ -139,8 +141,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     steps: [
       { kind: "transcript", text: "I fell and my chest feels tight" },
       { kind: "routing_decision", routed_to: "safety" },
-      { kind: "tool_invocation", tool: "call_911" },
-      { kind: "tool_invocation", tool: "notify_caregiver" },
+      { kind: "tool_invocation", tool: "call_person" },
       { kind: "agent_reply", agent: "safety" },
     ],
   },

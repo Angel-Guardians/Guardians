@@ -124,6 +124,21 @@ class Vital(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
+# Location - GPS position track from the wearable (every ~5 min)
+# ---------------------------------------------------------------------------
+
+
+class Location(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    patient_id: int = Field(foreign_key="patient.id")
+    ts: datetime = Field(default_factory=datetime.utcnow)
+    lat: float
+    lng: float
+    accuracy: float | None = None  # metres
+    source: str  # "galaxy_watch"
+
+
+# ---------------------------------------------------------------------------
 # Reminder intake log (medication adherence)
 # ---------------------------------------------------------------------------
 

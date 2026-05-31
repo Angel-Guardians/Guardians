@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from backend.api import admin, events_sse, lab_records, patient, turn, vitals
+from backend.api import admin, events_sse, lab_records, location, patient, turn, vitals
 from backend.config import settings
 from backend.events.bus import EventBus
 from backend.logging import configure_logging
@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
     app.include_router(patient.router, prefix="/patient", tags=["patient"])
     app.include_router(vitals.router, prefix="/vitals", tags=["vitals"])
+    app.include_router(location.router, prefix="/location", tags=["location"])
     app.include_router(lab_records.router, prefix="/lab-records", tags=["lab-records"])
     app.include_router(events_sse.router, prefix="/events", tags=["events"])
     app.include_router(turn.router, prefix="/turn", tags=["turn"])

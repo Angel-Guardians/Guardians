@@ -104,6 +104,33 @@ class FallEventRead(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Location track (wearable GPS -> backend) + read-back for the map
+# ---------------------------------------------------------------------------
+
+
+class LocationIngest(BaseModel):
+    lat: float
+    lng: float
+    accuracy: float | None = None  # metres
+    ts: datetime | None = None  # ISO-8601 UTC; defaults to server time if absent
+
+
+class LocationBatch(BaseModel):
+    """Body of POST /location/ingest — a batch of GPS samples."""
+
+    patient_id: int = 1
+    device: str = "galaxy_watch"
+    points: list[LocationIngest] = Field(default_factory=list)
+
+
+class LocationRead(BaseModel):
+    lat: float
+    lng: float
+    accuracy: float | None = None
+    ts: str  # ISO-8601 (UTC, trailing Z)
+
+
+# ---------------------------------------------------------------------------
 # Lab / health records (document + parsed observation rows)
 # ---------------------------------------------------------------------------
 

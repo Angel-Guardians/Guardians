@@ -32,7 +32,10 @@ class ToolCallingAgent:
         self._llm = llm
         self._registry = registry
 
-    def chat(self, user_message: str, history: list[Message]) -> str:
+    def chat(self, user_message: str, history: list[Message], emit=None) -> str:
+        """Run the tool loop. `emit(kind, payload)` is an optional progress hook
+        (kind == "tool_invocation") so the live dashboard can light up each tool
+        the instant it fires; safe to omit for headless runs (phase0, tests)."""
         messages: list[Message] = [
             Message(role="system", content=self.system_prompt),
             *history,
@@ -54,6 +57,11 @@ class ToolCallingAgent:
             )
             for call in response.tool_calls:
                 result = self._registry.execute(call.name, call.arguments)
+                if emit is not None:
+                    emit(
+                        "tool_invocation",
+                        {"tool": call.name, "args": call.arguments, "result": result},
+                    )
                 messages.append(
                     Message(role="tool", tool_call_id=call.id, content=json.dumps(result))
                 )

@@ -26,6 +26,7 @@ const ALL_NODE_IDS: NodeId[] = [
   "input",
   "router",
   ...AGENT_ROUTES,
+  "call_person",
   "call_911",
   "notify_caregiver",
   "find_cool_space",

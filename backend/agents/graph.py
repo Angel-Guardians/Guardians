@@ -29,6 +29,10 @@ class GuardianState(TypedDict, total=False):
     history: list[Message]
     route: str
     reply: str
+    # Optional per-turn progress hook: emit(kind, payload). Carries the live
+    # dashboard's step events (routing_decision / tool_invocation / agent_reply)
+    # as they happen. Absent on headless runs, so the graph still works offline.
+    emit: object
 
 
 def build_guardian_graph(
@@ -42,11 +46,20 @@ def build_guardian_graph(
     """
 
     def router_node(state: GuardianState) -> GuardianState:
-        return {"route": route_fn(state["user_message"], state.get("history", []))}
+        route = route_fn(state["user_message"], state.get("history", []))
+        emit = state.get("emit")
+        if emit is not None:
+            emit("routing_decision", {"routed_to": route, "rationale": "keyword/LLM hybrid"})
+        return {"route": route}
 
-    def make_specialist_node(agent: ToolCallingAgent) -> Callable[[GuardianState], GuardianState]:
+    def make_specialist_node(
+        name: str, agent: ToolCallingAgent
+    ) -> Callable[[GuardianState], GuardianState]:
         def node(state: GuardianState) -> GuardianState:
-            reply = agent.chat(state["user_message"], state.get("history", []))
+            emit = state.get("emit")
+            reply = agent.chat(state["user_message"], state.get("history", []), emit=emit)
+            if emit is not None:
+                emit("agent_reply", {"agent": name, "text": reply})
             return {"reply": reply}
 
         return node
@@ -54,7 +67,7 @@ def build_guardian_graph(
     graph = StateGraph(GuardianState)
     graph.add_node("router", router_node)
     for name, agent in agents.items():
-        graph.add_node(name, make_specialist_node(agent))
+        graph.add_node(name, make_specialist_node(name, agent))
 
     graph.add_edge(START, "router")
     # Conditional fan-out: the router's chosen route name selects the next node.

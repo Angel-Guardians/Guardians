@@ -158,3 +158,12 @@ class AgentReplyEvent(GuardianEvent):
     type: Literal["agent_reply"] = "agent_reply"
     agent: str
     text: str
+
+
+class PipelineStepEvent(GuardianEvent):
+    """A node in the live agent pipeline lighting up (Live page graph)."""
+
+    type: Literal["pipeline_step"] = "pipeline_step"
+    node_id: str
+    status: str  # "active" | "done" | "error"
+    detail: str | None = None
