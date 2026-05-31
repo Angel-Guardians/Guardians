@@ -62,6 +62,7 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
         }
     }
     LaunchedEffect(Unit) {
+        vm.resumeMonitoringIfActive()
         if (permissions.isNotEmpty()) launcher.launch(permissions)
     }
 
@@ -86,6 +87,8 @@ private fun GuardianApp(vm: MonitorViewModel = viewModel()) {
 private fun requiredPermissions(): Array<String> = buildList {
     add(Manifest.permission.BODY_SENSORS)
     add(Manifest.permission.ACTIVITY_RECOGNITION)
+    add(Manifest.permission.ACCESS_FINE_LOCATION)
+    add(Manifest.permission.ACCESS_COARSE_LOCATION)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         add(Manifest.permission.POST_NOTIFICATIONS)
     }

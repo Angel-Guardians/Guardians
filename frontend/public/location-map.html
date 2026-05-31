@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guardian — Live Position</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+    #bar {
+      padding: 10px 16px; background: #0f172a; color: #e2e8f0; font-size: 14px;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    #bar b { color: #fff; }
+    #bar a { color: #60a5fa; }
+    #dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; }
+    #map { height: calc(100% - 44px); width: 100%; background: #1e293b; }
+  </style>
+</head>
+<body>
+  <div id="bar"><span id="dot"></span><span id="status">Loading…</span></div>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // The backend (same machine). The map page is served from :3000, which the
+    // backend's CORS already allows, so this fetch is permitted.
+    const BACKEND = (location.hostname ? `http://${location.hostname}:8000` : "http://localhost:8000");
+    const PATIENT = 1;
+    const SINCE = "24h";
+
+    const map = L.map("map").setView([20, 0], 2);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap",
+    }).addTo(map);
+
+    const track = L.polyline([], { color: "#2563eb", weight: 3, opacity: 0.7 }).addTo(map);
+    const markers = L.layerGroup().addTo(map);
+    let fitted = false;
+
+    function fmt(ts) { const d = new Date(ts); return isNaN(d) ? ts : d.toLocaleString(); }
+
+    async function refresh() {
+      const status = document.getElementById("status");
+      try {
+        const res = await fetch(`${BACKEND}/location?since=${SINCE}&patient_id=${PATIENT}`);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const points = await res.json(); // newest first
+        if (!points.length) {
+          status.textContent = "No positions yet — turn Monitoring on and give the watch a GPS fix (near a window / outdoors).";
+          return;
+        }
+        track.setLatLngs(points.map((p) => [p.lat, p.lng]).reverse());
+        markers.clearLayers();
+        points.forEach((p, i) => {
+          const m = L.circleMarker([p.lat, p.lng], {
+            radius: i === 0 ? 8 : 4,
+            color: i === 0 ? "#dc2626" : "#2563eb",
+            fillColor: i === 0 ? "#dc2626" : "#2563eb",
+            fillOpacity: 0.85, weight: 1,
+          });
+          const acc = p.accuracy != null ? `±${Math.round(p.accuracy)} m` : "";
+          m.bindPopup(`${fmt(p.ts)}<br>${p.lat.toFixed(5)}, ${p.lng.toFixed(5)} ${acc}`);
+          markers.addLayer(m);
+        });
+        const latest = points[0];
+        if (!fitted) { map.setView([latest.lat, latest.lng], 16); fitted = true; }
+        const acc = latest.accuracy != null ? `±${Math.round(latest.accuracy)} m` : "";
+        const g = `https://www.google.com/maps?q=${latest.lat},${latest.lng}`;
+        status.innerHTML =
+          `Latest: <b>${latest.lat.toFixed(5)}, ${latest.lng.toFixed(5)}</b> · ${acc} · ${fmt(latest.ts)} · ` +
+          `${points.length} point(s) · <a href="${g}" target="_blank" rel="noreferrer">Open in Google Maps</a>`;
+      } catch (e) {
+        status.textContent = "Cannot reach backend at " + BACKEND + " — " + e.message;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>

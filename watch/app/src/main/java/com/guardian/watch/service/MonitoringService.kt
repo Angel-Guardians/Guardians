@@ -4,9 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.Manifest
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -72,16 +74,29 @@ class MonitoringService : Service() {
             .catch { /* sensor unavailable or permission revoked; keep service alive */ }
             .launchIn(scope)
 
-        // Offline-first upload loop.
+        // Offline-first upload loop (vitals + locations).
         scope.launch {
             while (isActive) {
                 runCatching { g.repository.syncOnce() }
+                runCatching { g.repository.syncLocationsOnce() }
                 delay(SYNC_INTERVAL_MS)
             }
         }
 
         // Fall detection runs alongside monitoring (accelerometer; no extra perm).
         fallDetector = FallDetector(this) { peakG -> onFallDetected(peakG) }.also { it.start() }
+
+        // GPS position every 5 minutes -> Room (flushed by the upload loop above).
+        scope.launch {
+            while (isActive) {
+                runCatching {
+                    g.locationProvider.current()?.let { loc ->
+                        g.repository.recordLocation(loc.latitude, loc.longitude, loc.accuracy)
+                    }
+                }
+                delay(LOCATION_INTERVAL_MS)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -124,13 +139,48 @@ class MonitoringService : Service() {
             .setContentIntent(contentIntent)
             .build()
 
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
-        } else {
-            0
-        }
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+        startForegroundResilient(notification)
     }
+
+    /**
+     * Start the foreground service, trying the richest type first and falling
+     * back so one type's restriction can't block monitoring entirely (e.g. if
+     * the OS rejects the `location` type, we still come up as `health`).
+     */
+    private fun startForegroundResilient(notification: Notification) {
+        val healthOnly =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            } else {
+                0
+            }
+        var lastError: Exception? = null
+        for (type in listOf(foregroundServiceType(), healthOnly, 0).distinct()) {
+            try {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+                return
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        throw lastError ?: IllegalStateException("startForeground failed")
+    }
+
+    /** Health, plus location when we hold the permission (omitted otherwise). */
+    private fun foregroundServiceType(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return 0
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+        if (hasLocationPermission()) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+        return type
+    }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
 
     // --- Fall handling ------------------------------------------------------
 
@@ -198,6 +248,7 @@ class MonitoringService : Service() {
         private const val ALERT_CHANNEL_ID = "guardian_fall_alerts"
         private const val ALERT_NOTIFICATION_ID = 1002
         private const val SYNC_INTERVAL_MS = 60_000L
+        private const val LOCATION_INTERVAL_MS = 5L * 60 * 1000
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(

@@ -6,6 +6,7 @@ import com.guardian.watch.data.repository.VitalsRepository
 import com.guardian.watch.data.settings.SettingsStore
 import com.guardian.watch.health.HealthConnectManager
 import com.guardian.watch.health.HealthServicesManager
+import com.guardian.watch.location.LocationProvider
 
 /**
  * Tiny manual dependency graph — no DI framework. Created once in
@@ -17,7 +18,9 @@ class GuardianGraph(context: Context) {
 
     val database: GuardianDatabase = GuardianDatabase.getInstance(appContext)
     val settings: SettingsStore = SettingsStore(appContext)
-    val repository: VitalsRepository = VitalsRepository(database.vitalReadingDao(), settings)
+    val repository: VitalsRepository =
+        VitalsRepository(database.vitalReadingDao(), database.locationReadingDao(), settings)
     val healthServicesManager: HealthServicesManager = HealthServicesManager(appContext)
     val healthConnectManager: HealthConnectManager = HealthConnectManager(appContext)
+    val locationProvider: LocationProvider = LocationProvider(appContext)
 }

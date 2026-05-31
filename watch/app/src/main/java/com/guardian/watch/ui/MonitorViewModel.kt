@@ -8,6 +8,7 @@ import com.guardian.watch.service.MonitoringService
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -89,6 +90,17 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     fun startMonitoring() = MonitoringService.start(getApplication())
 
     fun stopMonitoring() = MonitoringService.stop(getApplication())
+
+    /**
+     * Self-heal: if the saved state says monitoring is on but the service isn't
+     * actually running (after a reinstall / reboot), bring it back. Safe to call
+     * on every launch — start() is idempotent.
+     */
+    fun resumeMonitoringIfActive() {
+        viewModelScope.launch {
+            if (settings.monitoringActive.first()) startMonitoring()
+        }
+    }
 
     fun syncNow() {
         viewModelScope.launch { repo.syncOnce() }
