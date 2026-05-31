@@ -40,6 +40,8 @@ class Patient(SQLModel, table=True):
     conditions: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     allergies: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     primary_language: str = "en"
+    location: str | None = None
+    bio: str | None = None
     notes: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

@@ -1,8 +1,10 @@
 """Phase 0 runner — text-file-in, text-out, single-agent, OpenAI-backed.
 
 Run from the project root:
-    python scripts/phase0.py
-    python scripts/phase0.py path/to/input.txt   # process a single file
+    uv run scripts/phase0.py                        # default patient (id=1)
+    uv run scripts/phase0.py --patient Sarah        # by name
+    uv run scripts/phase0.py --patient-id 2         # by id
+    uv run scripts/phase0.py path/to/input.txt      # process a single file
 
 Prerequisites:
     pip install -e ".[dev]"
@@ -35,9 +37,40 @@ def read_text_file(path: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
+def resolve_patient_id(args: list[str]) -> tuple[int, list[str]]:
+    """Extract --patient <name> or --patient-id <id> from args, return (id, remaining_args)."""
+    from sqlmodel import Session, select
+    from backend.db.models import Patient
+    from backend.db.session import engine
+
+    remaining = list(args)
+
+    if "--patient-id" in remaining:
+        idx = remaining.index("--patient-id")
+        patient_id = int(remaining[idx + 1])
+        del remaining[idx:idx + 2]
+        return patient_id, remaining
+
+    if "--patient" in remaining:
+        idx = remaining.index("--patient")
+        name = remaining[idx + 1]
+        del remaining[idx:idx + 2]
+        with Session(engine) as session:
+            patient = session.exec(select(Patient).where(Patient.name == name)).first()
+        if patient is None or patient.id is None:
+            print(f"Error: no patient named '{name}' found in the database.")
+            sys.exit(1)
+        return patient.id, remaining
+
+    return 1, remaining
+
+
 def main() -> None:
-    logger.info("Initialising Guardian Phase 0 (text mode, OpenAI)…")
-    agent = GuardianAgent()
+    patient_id, remaining_args = resolve_patient_id(sys.argv[1:])
+    logger.info(f"Initialising Guardian Phase 0 (patient_id={patient_id}, text mode, OpenAI)…")
+    agent = GuardianAgent(patient_id=patient_id)
+    # Replace sys.argv so the rest of main() sees only non-flag args.
+    sys.argv = [sys.argv[0], *remaining_args]
 
     print()
     print("Guardian Phase 0 — text file mode")

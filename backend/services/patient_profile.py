@@ -43,6 +43,8 @@ def get_patient_profile(session: Session, patient_id: int) -> PatientProfileRead
         conditions=patient.conditions,
         allergies=patient.allergies,
         primary_language=patient.primary_language,
+        location=patient.location,
+        bio=patient.bio,
         notes=patient.notes,
         emergency_contacts=[
             EmergencyContactRead.model_validate(c, from_attributes=True) for c in contacts
@@ -67,6 +69,8 @@ def update_patient_profile(
     patient.conditions = data.conditions
     patient.allergies = data.allergies
     patient.primary_language = data.primary_language
+    patient.location = data.location
+    patient.bio = data.bio
     patient.notes = data.notes
 
     for contact in session.exec(

@@ -26,7 +26,7 @@ from backend.agents.prompts import (
     reminder,
     safety,
 )
-from backend.agents.prompts._base import PATIENT_CONTEXT, with_context
+from backend.agents.prompts._base import build_patient_context, with_context
 
 # name -> {version -> prompt text}
 PROMPTS: dict[str, dict[str, str]] = {
@@ -84,4 +84,4 @@ def get_prompt(name: str) -> str:
         ) from None
 
 
-__all__ = ["PROMPTS", "ACTIVE", "PATIENT_CONTEXT", "with_context", "get_prompt"]
+__all__ = ["PROMPTS", "ACTIVE", "build_patient_context", "with_context", "get_prompt"]

@@ -45,6 +45,8 @@ class PatientProfileRead(BaseModel):
     conditions: list[str] = Field(default_factory=list)
     allergies: list[str] = Field(default_factory=list)
     primary_language: str = "en"
+    location: str | None = None
+    bio: str | None = None
     notes: str | None = None
     emergency_contacts: list[EmergencyContactRead] = Field(default_factory=list)
     medications: list[ProfileMedicationRead] = Field(default_factory=list)
@@ -56,6 +58,8 @@ class PatientProfileWrite(BaseModel):
     conditions: list[str] = Field(default_factory=list)
     allergies: list[str] = Field(default_factory=list)
     primary_language: str = "en"
+    location: str | None = None
+    bio: str | None = None
     notes: str | None = None
     emergency_contacts: list[EmergencyContactWrite] = Field(default_factory=list)
     medications: list[ProfileMedicationWrite] = Field(default_factory=list)
