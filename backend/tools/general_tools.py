@@ -1,8 +1,11 @@
 """General communication tools.
 
-`call_person` places an outbound phone call to a named contact and reads
-a message aloud via Twilio <Say>.  Falls back to stub behaviour when Twilio
-credentials are not configured, so the agent loop works in dev without any keys.
+`call_person` places an outbound phone call to a named person and reads a message
+aloud via Twilio <Say>. The model picks the person by name or relationship from the
+patient's emergency contacts; the phone number is retrieved from the DB. An explicit
+E.164 number may be passed to reach someone not on the contact list. Falls back to
+stub behaviour when Twilio credentials are not configured, so the agent loop works in
+dev without any keys.
 """
 from __future__ import annotations
 
@@ -18,21 +21,22 @@ load_dotenv()
 CALL_LOG: list[dict[str, Any]] = []
 
 
-def _build_contact_book() -> dict[str, str]:
-    book: dict[str, str] = {}
-    for entry in os.getenv("CONTACT_BOOK", "").split(";"):
-        entry = entry.strip()
-        if ":" in entry:
-            name, phone = entry.split(":", 1)
-            book[name.strip().lower()] = phone.strip()
-    return book
+def _lookup_contact(person: str) -> tuple[str, str] | None:
+    """Resolve a name/relationship to (matched_name, phone) from the DB, or None."""
+    from sqlmodel import Session
 
+    from backend.db.session import engine
+    from backend.tools._contacts import default_patient_id, resolve_contacts
 
-def _resolve_phone(person: str, phone: str) -> str:
-    """Return `phone` if provided, otherwise look up `person` in the contact book."""
-    if phone:
-        return phone
-    return _build_contact_book().get(person.lower(), "")
+    with Session(engine) as session:
+        patient_id = default_patient_id(session)
+        if patient_id is None:
+            return None
+        matches = resolve_contacts(session, patient_id, [person])
+        if not matches:
+            return None
+        top = matches[0]
+        return (top.name, top.phone)
 
 
 @audit_log
@@ -45,8 +49,32 @@ def call_person(
 ) -> dict[str, Any]:
     """Call a person by name and read them a message aloud via Twilio <Say>.
 
-    Falls back to a stub response when Twilio credentials are absent.
+    Resolves the number from the patient's emergency contacts (by name or
+    relationship). An explicit ``phone`` overrides the lookup. Falls back to a
+    stub when Twilio credentials are absent.
     """
+    # Resolve who we're calling: an explicit number wins, else the contact list.
+    to_number = phone
+    matched_name = person
+    if not to_number:
+        found = _lookup_contact(person)
+        if found is not None:
+            matched_name, to_number = found
+
+    if not to_number:
+        event = {
+            "tool": "call_person",
+            "status": "error",
+            "person": person,
+            "message": message,
+            "error": (
+                f"No phone number found for '{person}'. They are not in the patient's "
+                "emergency contacts; pass an explicit phone number to reach them."
+            ),
+        }
+        CALL_LOG.append(event)
+        return event
+
     twilio_ready = bool(
         os.getenv("TWILIO_ACCOUNT_SID")
         and os.getenv("TWILIO_AUTH_TOKEN")
@@ -57,24 +85,10 @@ def call_person(
         event = {
             "tool": "call_person",
             "status": "stub",
-            "person": person,
+            "person": matched_name,
+            "phone": to_number,
             "message": message,
             "note": "Set TWILIO_* in .env to enable real calls.",
-        }
-        CALL_LOG.append(event)
-        return event
-
-    to_number = _resolve_phone(person, phone) or os.getenv("TWILIO_TEST_TO_NUMBER", "")
-    if not to_number:
-        event = {
-            "tool": "call_person",
-            "status": "error",
-            "person": person,
-            "message": message,
-            "error": (
-                f"No phone number found for '{person}'. "
-                "Provide an explicit phone number or add an entry to CONTACT_BOOK in .env."
-            ),
         }
         CALL_LOG.append(event)
         return event
@@ -93,7 +107,7 @@ def call_person(
         "tool": "call_person",
         "status": "called",
         "channel": "voice",
-        "person": person,
+        "person": matched_name,
         "phone": to_number,
         "message": message,
         "call_sid": call.sid,

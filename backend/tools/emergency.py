@@ -20,6 +20,24 @@ load_dotenv()
 CALL_LOG: list[dict[str, Any]] = []
 
 
+def _normalize_contacts(
+    contacts: list[str] | str | None, contact: str | None
+) -> list[str]:
+    """Coerce the model's contact selection into a clean list of names/relationships.
+
+    Tolerates a single string, a list, or the legacy ``contact=`` singular arg.
+    An empty result means "no one named" → caller defaults to priority-1.
+    """
+    out: list[str] = []
+    if isinstance(contacts, str):
+        out.append(contacts)
+    elif isinstance(contacts, list):
+        out.extend(str(c) for c in contacts)
+    if contact:
+        out.append(contact)
+    return [c.strip() for c in out if c and c.strip()]
+
+
 @audit_log
 @idempotent(window_seconds=60)
 def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
@@ -83,14 +101,43 @@ def call_911(reason: str, location: str = "patient home") -> dict[str, Any]:
 @idempotent(window_seconds=60)
 def notify_caregiver(
     message: str,
-    contact: str = "Sophie",
-    phone: str = "",
+    contacts: list[str] | str | None = None,
+    contact: str | None = None,
 ) -> dict[str, Any]:
-    """Call the caregiver and read the message aloud via Twilio <Say>.
+    """Call one or more of the patient's emergency contacts and read a message aloud.
 
-    Falls back to a stub response when Twilio credentials are absent,
-    so the agent loop works in dev/test without any external keys.
+    The model chooses *who* to reach by name or relationship (e.g. ["Maria"],
+    ["daughter", "family_doctor"]); the phone numbers are retrieved from the
+    patient's emergency-contact list in the DB — never passed in by the model.
+    When no contact is named, the highest-priority contact is used.
+
+    Falls back to a stub (showing who *would* be called) when Twilio credentials
+    are absent, so the agent loop works in dev/test without any external keys.
     """
+    requested = _normalize_contacts(contacts, contact)
+
+    from sqlmodel import Session
+
+    from backend.db.session import engine
+    from backend.tools._contacts import default_patient_id, resolve_contacts
+
+    with Session(engine) as session:
+        patient_id = default_patient_id(session)
+        targets = resolve_contacts(session, patient_id, requested) if patient_id else []
+        # Detach the fields we need before the session closes.
+        resolved = [(c.name, c.relationship, c.phone) for c in targets]
+
+    if not resolved:
+        event = {
+            "tool": "notify_caregiver",
+            "status": "error",
+            "requested": requested,
+            "message": message,
+            "error": "No matching emergency contact on file for the patient.",
+        }
+        CALL_LOG.append(event)
+        return event
+
     twilio_ready = bool(
         os.getenv("TWILIO_ACCOUNT_SID")
         and os.getenv("TWILIO_AUTH_TOKEN")
@@ -102,21 +149,12 @@ def notify_caregiver(
             "tool": "notify_caregiver",
             "status": "stub",
             "channel": "none",
-            "contact": contact,
             "message": message,
+            "calls": [
+                {"contact": name, "relationship": rel, "phone": phone, "status": "stub"}
+                for name, rel, phone in resolved
+            ],
             "note": "Set TWILIO_* in .env to enable real calls.",
-        }
-        CALL_LOG.append(event)
-        return event
-
-    to_number = os.getenv("TWILIO_TEST_TO_NUMBER")
-    if not to_number:
-        event = {
-            "tool": "notify_caregiver",
-            "status": "error",
-            "contact": contact,
-            "message": message,
-            "error": "No phone number — set TWILIO_TEST_TO_NUMBER in .env.",
         }
         CALL_LOG.append(event)
         return event
@@ -125,20 +163,28 @@ def notify_caregiver(
 
     twilio = TwilioClient(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
     twiml = f'<Response><Say voice="Polly.Joanna">{message}</Say></Response>'
-    call = twilio.calls.create(
-        to=to_number,
-        from_=os.getenv("TWILIO_FROM_NUMBER"),
-        twiml=twiml,
-    )
+    from_number = os.getenv("TWILIO_FROM_NUMBER")
+
+    calls: list[dict[str, Any]] = []
+    for name, rel, phone in resolved:
+        if not phone:
+            calls.append(
+                {"contact": name, "relationship": rel, "status": "error",
+                 "error": "no phone number on file"}
+            )
+            continue
+        call = twilio.calls.create(to=phone, from_=from_number, twiml=twiml)
+        calls.append(
+            {"contact": name, "relationship": rel, "phone": phone,
+             "status": "called", "call_sid": call.sid}
+        )
 
     event = {
         "tool": "notify_caregiver",
         "status": "called",
         "channel": "voice",
-        "contact": contact,
-        "phone": to_number,
         "message": message,
-        "call_sid": call.sid,
+        "calls": calls,
     }
     CALL_LOG.append(event)
     return event
@@ -165,13 +211,30 @@ def register(registry) -> None:
     registry.register(
         ToolSpec(
             name="notify_caregiver",
-            description="Call the patient's emergency contact and read them a voice message. Use for urgent situations where the caregiver must be informed immediately.",
+            description=(
+                "Call one or more of the patient's emergency contacts and read them a "
+                "voice message. Choose who to reach from the emergency contacts listed "
+                "in your patient context, by name or relationship — the phone numbers "
+                "are looked up automatically, so never pass a number. Omit 'contacts' "
+                "to reach the highest-priority contact. Use for urgent situations where "
+                "a caregiver must be informed immediately."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "message": {"type": "string", "description": "The message to read aloud to the caregiver."},
-                    "contact": {"type": "string", "description": "Caregiver name (e.g. 'Sophie')."},
-                    "phone": {"type": "string", "description": "Caregiver phone number in E.164 format (e.g. '+15555550111'). Leave blank to use the default emergency contact."},
+                    "message": {
+                        "type": "string",
+                        "description": "The message to read aloud to the contact(s).",
+                    },
+                    "contacts": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Names or relationships of the emergency contacts to call "
+                            "(e.g. ['Maria'] or ['daughter', 'family_doctor']). "
+                            "Omit to use the highest-priority contact."
+                        ),
+                    },
                 },
                 "required": ["message"],
             },

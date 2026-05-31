@@ -48,7 +48,6 @@ class Settings(BaseSettings):
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_from_number: str = ""
-    twilio_test_to_number: str = ""
 
     # Public URL this server is reachable at (used by Twilio to fetch TTS audio).
     # In local dev: run `ngrok http 8000` and paste the https URL here.

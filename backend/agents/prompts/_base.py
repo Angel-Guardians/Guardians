@@ -30,8 +30,10 @@ def build_patient_context(profile: "PatientProfileRead") -> str:
         med_strs = [f"{m.name} {m.dose}" for m in profile.medications]
         lines.append(f"Medications: {', '.join(med_strs)}.")
     if profile.emergency_contacts:
+        # Names + relationships only — never phone numbers. Tools that call a
+        # contact look the number up from the DB by the name/relationship you choose.
         contacts = [
-            f"{c.name} ({c.relationship}, {c.phone})"
+            f"{c.name} ({c.relationship}, priority {c.priority})"
             for c in sorted(profile.emergency_contacts, key=lambda c: c.priority)
         ]
         lines.append(f"Emergency contacts: {', '.join(contacts)}.")
