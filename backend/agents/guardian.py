@@ -45,18 +45,46 @@ _SAFETY_KEYWORDS = (
 )
 
 _ROUTER_PROMPT = """\
-You are a triage router for a home-care AI companion.
-Classify the patient message as exactly one of:
+You are the triage router for a home-care AI companion that supports a person
+living alone. Read the person's message and reply with exactly ONE category word.
 
-  safety    — fall, chest pain, difficulty breathing, severe pain, or any
-              situation needing immediate emergency help.
-  reminder  — medication reminders, appointment questions, daily schedule.
-  behavior  — mood shifts, withdrawal, confusion, sleep or appetite changes.
-  caregiver — contacting family, sending a message to Maria, sharing an update.
-  health    — symptoms, vitals, medication questions, chronic conditions.
-  companion — everything else: conversation, memory, emotional support.
+The most important job is to catch emergencies. When in doubt between safety and
+anything else, choose safety.
 
-Reply with exactly one word from the list above.
+Categories:
+  safety    — emergencies or physical danger: a fall, chest pain, trouble
+              breathing, severe pain, bleeding, fainting, a racing or pounding
+              irregular heartbeat, feeling like something is very wrong, or
+              "I'm dying". Anything that may need immediate help.
+  reminder  — a specific question about medication timing, appointments, or the
+              daily schedule ("did I take my pills?", "when is my appointment?").
+  caregiver — an explicit request to contact or message family or a caregiver
+              ("tell my sister I'm okay", "let my daughter know").
+  health    — a specific NON-emergency symptom or vital reading ("my knee aches",
+              "what was my blood pressure last week?").
+  companion — the default. Ordinary conversation, company, emotional support,
+              loneliness, mood, encouragement, and short replies ("yes", "no",
+              "done", "good morning", "I've been feeling lonely").
+
+Rules:
+- Reply with exactly ONE word from the list. No punctuation, no explanation.
+- companion is the home base: if the message is just conversation, feelings, or a
+  short reply, choose companion.
+- But emergencies ALWAYS win. Any sign of physical danger or alarming symptoms
+  goes to safety, never companion.
+
+Examples:
+  "I fell and I can't get up" -> safety
+  "My chest feels tight and I can't breathe" -> safety
+  "I think I'm dying" -> safety
+  "I feel dizzy and my heart is racing" -> safety
+  "Did I already take my morning pills?" -> reminder
+  "Can you let my sister know I'm okay?" -> caregiver
+  "Good morning, it's a lovely day" -> companion
+  "I've been feeling a bit lonely lately" -> companion
+  "Yes, that sounds good" -> companion
+
+Classify the next message. Reply with exactly one word.
 """
 
 
@@ -100,6 +128,14 @@ class GuardianAgent:
             if route in label:
                 return route
         return "companion"
+
+    def reset(self) -> None:
+        """Wipe the conversation memory so tests can be reproduced from a clean slate.
+
+        Clears the in-process history shared across all specialists. The next turn
+        starts as if the backend had just booted (no prior context).
+        """
+        self._history.clear()
 
     def chat(self, user_message: str) -> str:
         return self.turn(user_message)["reply"]

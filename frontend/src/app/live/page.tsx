@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -34,7 +36,20 @@ function fmtTime(ts: string) {
 }
 
 export default function LivePage() {
-  const { events, status } = useEventStream();
+  const { events, status, clearEvents } = useEventStream();
+  const [resetting, setResetting] = useState(false);
+
+  async function handleReset() {
+    setResetting(true);
+    try {
+      await api.resetContext();
+      clearEvents();
+    } catch {
+      // Backend unreachable; leave the log as-is.
+    } finally {
+      setResetting(false);
+    }
+  }
 
   // Transcript = the running text of transcript-kind events, oldest first.
   const transcript = useMemo(
@@ -54,7 +69,17 @@ export default function LivePage() {
           <h1 className="text-2xl font-semibold tracking-tight">Live</h1>
           <p className="text-muted-foreground">Event stream + active transcript</p>
         </div>
-        <StatusBadge status={status} />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleReset}
+            disabled={resetting}
+          >
+            {resetting ? "Resetting..." : "Reset context"}
+          </Button>
+          <StatusBadge status={status} />
+        </div>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">

@@ -66,3 +66,16 @@ async def take_turn(body: TurnRequest, request: Request) -> TurnResponse:
     )
 
     return TurnResponse(**result)
+
+
+@router.post("/reset")
+async def reset_context(request: Request) -> dict:
+    """Clear Guardian's conversation memory so a test run starts fresh.
+
+    No-op-safe if the agent failed to initialise. The Live page calls this when
+    the user clicks "Reset context".
+    """
+    guardian = request.app.state.guardian
+    if guardian is not None:
+        guardian.reset()
+    return {"ok": True}
