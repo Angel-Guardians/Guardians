@@ -41,6 +41,13 @@ export interface Patient {
   notes?: string | null;
 }
 
+/** One step in a conversational turn — mirrors backend/api/turn.py publish order. */
+export type PipelineStep =
+  | { kind: "transcript"; text: string }
+  | { kind: "routing_decision"; routed_to: string }
+  | { kind: "tool_invocation"; tool: string }
+  | { kind: "agent_reply"; agent: string };
+
 // Events streamed from GET /events/sse. The backend serializes domain events
 // (fall detected, transcript chunk, vitals reading, nudge, etc.) as JSON.
 export interface GuardianEvent {
