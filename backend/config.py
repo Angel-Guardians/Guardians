@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # Frontend dev origins allowed by CORS
     cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Optional regex of allowed origins (e.g. LAN IPs for the watch / Flutter client).
+    cors_allow_origin_regex: str | None = None
 
     # CPU pinning
     always_on_cpu_cores: str = "0-5"

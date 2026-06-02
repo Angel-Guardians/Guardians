@@ -1,70 +1,120 @@
 # Guardian — Home Emergency AI Companion
 
-> **New to the repo?** Read [`ONBOARDING.md`](ONBOARDING.md) for a guided reading
-> path, and [`ARCHITECTURE.md`](ARCHITECTURE.md) / [`CODEBASE_MAP.md`](CODEBASE_MAP.md)
-> for the design.
+> For people who live alone: a smartwatch senses a fall or a vitals anomaly, a
+> six-agent backend understands what happened and **acts** — calling 911 with the
+> person's full medical context and alerting family — while caregivers watch every
+> step live. Health data can run **entirely on local hardware**.
+>
+> Built over one weekend at **NVIDIA Spark Hack · Toronto**.
 
-A multi-agent home-care companion. A hybrid router sends each message to one of
-**six specialist agents** (safety, health, reminder, behavior, caregiver liaison,
-companion); agents call tools (911 dispatch, caregiver SMS, schedule, vitals,
-cool-space lookup, person-history recall) through a tool loop. Everything talks to
-a **provider-neutral LLM seam**, so the same code runs on **OpenAI cloud today**
-and a **local NVIDIA DGX Spark** later — only `.env` changes.
-
-```
-                 POST /turn (text)            GET /events/sse
- Watch ─vitals─▶  FastAPI  ─▶ GuardianAgent (LangGraph) ─▶ events ─▶ Web / Flutter UI
-                    │            router ─▶ 6 specialists ─▶ tools
-                    └─ SQLite/Postgres (profile, vitals, event log)
-```
+![Guardian — system architecture](demo/guardian-architecture.png)
 
 ---
 
-## Parts of the system
+## What it is
 
-| Part | Path | Stack | Talks to |
+Guardian is **one backend and four clients**, wired into a single coordinated pipeline:
+
+```
+Samsung Watch ──vitals + fall events──▶ FastAPI backend ──SSE──▶ Next.js dashboard
+      │              ▲                        │                   Flutter app
+      └── voice WS ──┘                   LangGraph router
+      (Kokoro TTS in / mic+STT out)      → 6 specialist agents
+                                         → tools (911, SMS, schedule, vitals, memory)
+                                         → local SQLite / Postgres DB
+```
+
+A **hybrid router** sends each message or sensor event to one of **six specialist
+agents**; agents call tools through a tool loop. The LLM is reached only through a
+**provider-neutral seam**, so the same code runs on **OpenAI cloud** or a **local
+Nemotron Nano model (NVFP4, served through TensorRT) on an NVIDIA DGX Spark** —
+changing `.env` is the only difference.
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design vision and
+[`CODEBASE_MAP.md`](CODEBASE_MAP.md) for what actually runs today.
+
+---
+
+## The parts, and how they interact
+
+| Part | Path | Stack | Role |
 |---|---|---|---|
-| **Backend / API** | `backend/` | Python 3.11+, FastAPI, LangGraph, SQLModel | the LLM, the DB, every client |
-| **Web dashboard** | `frontend/` | Next.js 16 + Tailwind + shadcn | backend HTTP + SSE |
-| **Mobile/desktop app** | `flutter_frontend/` | Flutter (Dart) | backend HTTP |
-| **Smartwatch** | `watch/` | Wear OS (Kotlin) | `POST /vitals/ingest` |
-| **Scripts** | `scripts/` | Python | run the agent headless / seed / inject data |
+| **Backend / API** | `backend/` | Python 3.11+, FastAPI, LangGraph, SQLModel | the hub — router, six agents, tools, voice, DB, event bus |
+| **Web dashboard** | `frontend/` | Next.js 16, Tailwind, shadcn/ui, Recharts, Leaflet | live observability over SSE |
+| **Mobile app** | `flutter_frontend/` | Flutter (Dart) | mobile mirror; **dials 911 through the phone and speaks the alert** |
+| **Smartwatch** | `watch/` | Wear OS (Kotlin), Health Services / Health Connect | the frontline sensor — vitals, fall detection, on-device voice |
 
-The backend is the hub — **start it first**; every UI is optional and connects to
-it over HTTP. The database (SQLite by default) auto-creates and seeds two demo
-patients (**Eleanor** and **Sarah**) on first run.
-
----
-
-## Prerequisites
-
-- **Python 3.11+** (on this Windows host, use the `C:\Python313` interpreter — see
-  [`CLAUDE.md`](CLAUDE.md)).
-- **Node.js 20+** and npm (for the web frontend).
-- An **OpenAI API key** (or a local DGX Spark endpoint — see below).
-- Optional: **Docker** (only for the pgvector RAG upgrade), **Flutter SDK 3.3+**
-  (mobile app), **Android Studio / JDK 21** (watch app).
+**The flow:** the watch streams vitals and fall events to the backend (`POST
+/vitals/ingest`) and opens a **bidirectional voice WebSocket** when risk is detected
+(Kokoro TTS streams down to the watch speaker; the mic + transcription stream up).
+The backend pushes every routing decision, tool call, risk score and reply to the
+dashboard and Flutter app over **Server-Sent Events**. When something is critical the
+Safety agent calls 911 (Twilio) with the person's full profile, and a call bridge
+pushes a `call_request` so the phone can place the call itself.
 
 ---
 
-## 1. Backend / API (start here)
+## How the brain works
+
+- **Hybrid router** (`backend/agents/guardian.py`) — a keyword fast-path catches
+  emergencies (`"I fell"`, `"chest pain"`) and routes to **Safety** before the LLM
+  ever runs; everything else is classified by the model.
+- **Six specialist agents** — each with its own prompt, tool subset, voice, and
+  escalation ceiling:
+
+  | Agent | Handles | Can dispatch 911? |
+  |---|---|---|
+  | **Safety** | falls, chest pain, breathing trouble | ✅ **only this agent** |
+  | **Health** | vitals anomalies, symptoms, chronic conditions | — |
+  | **Companion** | calm-keeping, reassurance while help is en route | — |
+  | **Reminder** | medications, appointments, daily schedule | — |
+  | **Behavior** | mood, confusion, withdrawal patterns | — |
+  | **Caregiver Liaison** | family alerts, incident summaries, outbound notices | — |
+
+- **Weighted risk monitor** (`backend/services/risk_monitor.py`) — scores live
+  vitals (heart rate, SpO₂, blood pressure, data freshness) into CTAS-aligned
+  severity tiers; a recent **fall instantly forces CRITICAL**.
+- **Voice loop** (`backend/api/voice.py`, `backend/voice/`) — `faster-whisper` STT →
+  router → agent → `Kokoro` TTS, streamed both ways over a WebSocket to the watch.
+- **Tools** (`backend/tools/`) — `call_911`, `notify_caregiver`, `call_person`,
+  `get_schedule`, `mark_med_taken`, `log_vital`, `recall_history`, `find_cool_space`
+  (Twilio-backed calls are **idempotent** — a retry never double-dials).
+- **Provider-neutral LLM seam** (`backend/llm/`) — the only place that imports a
+  vendor SDK. OpenAI cloud by default; point `LLM_*` at any OpenAI-compatible
+  endpoint (TensorRT-LLM, vLLM, Ollama, NIM) to run fully local.
+
+---
+
+## Demo
+
+Rendered from a real run on the running app (Eleanor, a fall + chest pain):
+
+- 🎬 **[60-second walkthrough](demo/guardian-combined-demo.mp4)** — the watch and the
+  agent system, side by side, on one synchronized clock.
+- ⌚ **[Watch loop](demo/guardian-watch-demo.mp4)** — vitals → 3-phase fall detection
+  → "Are you OK?" → two-way voice.
+- 💻 **[Dashboard / backend flow](demo/guardian-live-demo.mp4)** — message → Safety →
+  `call_911` + caregiver alert → reply → risk gauge.
+- 🗺️ **[System architecture](demo/guardian-architecture.png)** — the diagram above.
+
+See [`demo/SCENARIO_WALKTHROUGHS.md`](demo/SCENARIO_WALKTHROUGHS.md) for the scripted
+scenarios.
+
+---
+
+## Quickstart
+
+The backend is the hub — **start it first**; every UI connects to it over HTTP/SSE.
+The SQLite database auto-creates and seeds demo patients **Eleanor** and **Sarah** on
+first run.
+
+### 1. Backend / API
 
 ```bash
-cp .env.example .env          # then set LLM_API_KEY=sk-...   (LLM_MODEL=gpt-4o-mini)
-pip install -e ".[dev]"       # installs the `guardian` package + dev tools
-```
-
-Run the API (FastAPI on **:8000**, SQLite auto-seeded):
-
-```bash
-guardian-backend                              # console script
-# or, equivalently (use this on Windows if the script isn't on PATH):
+cp .env.example .env          # set LLM_API_KEY=sk-...   (LLM_MODEL=gpt-4o-mini)
+pip install -e ".[dev]"       # installs the guardian package + dev tools
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
-
-> **Windows note:** the pip console scripts (`guardian-backend`, `guardian-seed`)
-> are often off-PATH. Use the `python -m …` forms, and run from the **repo root** —
-> the SQLite path `sqlite:///./guardian.db` is relative to your working directory.
 
 Talk to Guardian over HTTP:
 
@@ -74,139 +124,79 @@ curl -s localhost:8000/turn/ -H 'content-type: application/json' \
 # -> {"route":"safety","reply":"...","tool_calls":[{"tool":"call_911",...}]}
 ```
 
-The routing decision, every tool call, and the spoken reply also stream onto
-`GET /events/sse`, so the **Live** page updates in real time.
-Interactive API docs: <http://localhost:8000/docs>.
+The routing decision, every tool call, risk score and reply also stream on
+`GET /events/sse` (the **Live** page). Interactive API docs: <http://localhost:8000/docs>.
 
-### Headless (no UI)
+> Run backend/DB commands from the **repo root** (`DATABASE_URL` is relative to the
+> cwd). If pip console scripts aren't on PATH, use the `python -m …` forms above.
 
-```bash
-python scripts/phase0.py                 # type a message (text-in / text-out)
-python scripts/phase0.py --patient Sarah # run as a specific seeded patient
-python scripts/try_live.py               # 5 scripted inputs through the real model
-```
-
----
-
-## 2. Web dashboard (`frontend/`)
+### 2. Web dashboard
 
 ```bash
-cd frontend
-npm install
-npm run dev          # Next.js on http://localhost:3000
+cd frontend && npm install && npm run dev      # http://localhost:3000
 ```
 
-Point at a non-default backend with `frontend/.env.local`:
+Pick a profile on first load. Pages: **Home · Live · Vitals · Reminders · Profile ·
+Location · Medical history · Admin**. Point at a non-default backend with
+`frontend/.env.local` → `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`.
+
+### 3. Mobile app
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+cd flutter_frontend && flutter pub get && flutter run
 ```
 
-**On first load you pick a profile** ("Who's using Guardian?"). From the avatar
-menu in the header you can switch profiles, create a new one, or log out. The
-chosen profile drives every page *and* the agent's context, so the backend must be
-running for the picker to list patients.
-
-> Next.js 16 allows only **one `next dev` per project** — if `:3000` is taken, stop
-> the existing server first. See [`frontend/CLAUDE.md`](frontend/CLAUDE.md).
-
-Build / lint: `npm run build`, `npm run lint`.
-
----
-
-## 3. Mobile / desktop app (`flutter_frontend/`)
-
-A mobile-first Flutter client mirroring the web UI (Home, Vitals, Talk, Care,
-Profile, Location, Medical history). Details in
+Mirrors the dashboard mobile-first; when Guardian triggers `call_911` it dials 911
+through the phone's own line and speaks the announcement on speakerphone. Details in
 [`flutter_frontend/README.md`](flutter_frontend/README.md).
 
-```bash
-cd flutter_frontend
-flutter pub get
-flutter run            # pick a connected device / emulator
-```
+### 4. Smartwatch
 
-The default backend URL is `http://10.0.2.2:8000` (the host machine as seen from an
-Android emulator). Change it at runtime from the in-app **Settings** dialog (it's
-persisted) — for a physical device use your machine's LAN IP, e.g.
-`http://192.168.1.50:8000`.
-
----
-
-## 4. Smartwatch (`watch/`)
-
-A standalone **Wear OS** app that records heart rate / steps / calories offline and
-POSTs unsent readings to the backend every ~60s. Full instructions in
+Open `watch/` in Android Studio, run the `app` config on a Wear OS device/emulator,
+grant sensor/mic permissions, then set the **Backend URL** (your LAN IP) and
+**Patient ID** in the watch's Settings. Full instructions in
 [`watch/README.md`](watch/README.md).
-
-1. Open the **`watch/`** folder in Android Studio as its own project; let it sync.
-2. Pick a watch device/emulator and **Run** the `app` configuration; grant the
-   sensor/activity/notification permissions on first launch.
-3. On the watch, open **Settings** → set **Backend URL** to your dev machine's LAN
-   IP (e.g. `http://192.168.1.50:8000`) and **Patient ID** (default `1`), then
-   toggle **Monitoring** on. Vitals show up on the web/Flutter **Vitals** page.
-
-Optional: bake in a default URL via `guardian.baseUrl=http://192.168.1.50:8000` in
-`watch/gradle.properties`. Toolchain: JDK 21, Android SDK, AGP 8.9.1 /
-Gradle 8.11.1, compileSdk 36. The watch and backend host must be on the same LAN.
 
 ---
 
 ## Configuration (`.env`)
 
-Copy `.env.example` → `.env`. The important knobs:
-
 | Variable | Purpose |
 |---|---|
-| `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` | the LLM backend (cloud or local). |
-| `DATABASE_URL` | `sqlite:///./guardian.db` (default) or a Postgres URL. |
-| `TWILIO_*` | real SMS/calls for the safety/caregiver tools (optional in dev). |
-| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY` | optional tracing (no-op if unset). |
-| `MEMORY_BACKEND` | `keyword` (default) or `pgvector` for RAG recall. |
-| `LAB_DOCUMENTS_DIR` | where uploaded lab-result PDFs are stored. |
+| `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` | the LLM backend (cloud or local) |
+| `DATABASE_URL` | `sqlite:///./guardian.db` (default) or a Postgres URL |
+| `TWILIO_*` | real SMS/calls for the safety & caregiver tools (optional in dev) |
+| `TTS_BACKEND` | `kokoro` (local, default), `openai`, or `auto` |
+| `MEMORY_BACKEND` | `keyword` (default) or `pgvector` for RAG recall |
+| `LAB_DOCUMENTS_DIR` | where uploaded lab-result PDFs are stored |
 
-Switching cloud ↔ local DGX Spark is a change to the `LLM_*` block **only** — no
-code changes. See [`SETUP_DGX_SPARK.md`](SETUP_DGX_SPARK.md) and [`MODELS.md`](MODELS.md).
-Short version: SSH-tunnel Ollama from the Spark, then set
-`LLM_BASE_URL=http://localhost:11434/v1`, `LLM_MODEL=nemotron-3-nano:4b`,
-`LLM_API_KEY=not-needed`.
+**Cloud ↔ local DGX Spark** is a change to the `LLM_*` block only — no code changes.
+On the Spark we deployed **Nemotron Nano quantized to NVFP4** and served it through
+**TensorRT**; any OpenAI-compatible endpoint works. See
+[`SETUP_DGX_SPARK.md`](SETUP_DGX_SPARK.md) and [`MODELS.md`](MODELS.md).
 
 ---
 
 ## Database
 
 - **SQLite by default** — zero setup. Tables are created and the schema is
-  auto-migrated (missing columns added) on backend startup; demo patients Eleanor
-  and Sarah are seeded if the DB is empty.
-- Re-seed manually: `python -c "from backend.db.seed import seed_all; seed_all()"`.
-- **Postgres / pgvector (optional, for RAG):**
-  ```bash
-  docker compose up -d postgres
-  # in .env: DATABASE_URL=postgresql+psycopg://guardian:guardian@localhost:5432/guardian
-  pip install -e ".[rag]"
-  ```
+  auto-migrated on startup; demo patients **Eleanor** and **Sarah** are seeded if the
+  DB is empty. Re-seed: `python -c "from backend.db.seed import seed_all; seed_all()"`.
+- **Postgres / pgvector (optional, for RAG):** `docker compose up -d postgres`, set
+  `DATABASE_URL=postgresql+psycopg://…`, then `pip install -e ".[rag]"`.
 
 ---
 
 ## Testing & quality
 
 ```bash
-python -m pytest               # run the suite (from the repo root)
-ruff check backend tests scripts
-ruff format backend tests scripts
+python -m pytest                       # from the repo root
+ruff check backend tests scripts && ruff format backend tests scripts
 ```
 
-Notes: the testcontainers-**Postgres** tests need Docker and error out without it;
-the **smoke** test places a real Twilio call and fails with HTTP 401 unless valid
-`TWILIO_*` creds are set. Both are environmental, not code failures.
-
----
-
-## Observability
-
-Set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY=...`. You get one span per graph
-node (which specialist ran) with model and tool calls nested beneath — "which
-agents called which tools", end to end. No code change; no-op when unset.
+The testcontainers-**Postgres** tests need Docker; the **smoke** test places a real
+Twilio call and fails with HTTP 401 without valid `TWILIO_*` creds — both are
+environmental, not code failures.
 
 ---
 
@@ -214,20 +204,27 @@ agents called which tools", end to end. No code change; no-op when unset.
 
 ```
 backend/
-  llm/          provider-neutral LLM seam (the ONLY place that imports `openai`)
-  agents/       guardian.py (router) + graph.py (LangGraph) + 6 specialists + base
-  tools/        registry + stubs: emergency, health, reminder, civic, memory
-  api/          turn.py (POST /turn), vitals.py (watch), events_sse.py, patient.py, lab_records.py
-  events/       bus.py (in-proc pub/sub) + types.py (event models)
-  services/     patient_profile, lab_records, … (business logic)
+  llm/          provider-neutral LLM seam (the ONLY place that imports a vendor SDK)
+  agents/       guardian.py (router) + graph.py + 6 specialists + prompts/
+  tools/        registry + emergency, health, reminder, civic, memory
+  services/     risk_monitor, fall_response, lab_records, medical_history_extract, patient_profile
+  voice/        kokoro_tts, stt, tts, call_audio, monitor (the voice WebSocket tier)
+  api/          turn, vitals, voice, events_sse, risk, location, lab_records, patient, admin, call_bridge
+  events/       in-proc pub/sub bus + typed event models
   db/           SQLModel models, session (engine + auto-migrate), seed
-  voice/, always_on/, workers/   ── audio / sensor-event tier (partly stubbed)
-frontend/          Next.js 16 + Tailwind + shadcn (Live / Vitals / Reminders / Profile)
+frontend/          Next.js 16 dashboard (Home/Live/Vitals/Reminders/Profile/Location/Medical history/Admin)
 flutter_frontend/  Flutter mobile/desktop client
-watch/             Wear OS app — real vitals -> POST /vitals/ingest every 60s
-data/personas/     markdown life-history notes (RAG source)
+watch/             Wear OS app — real vitals + fall detection + voice
+demo/              architecture diagram, demo videos, scenario walkthroughs, personas
 scripts/           phase0.py, try_live.py, seed_patient.py, inject_vital.py, demo_reset.py
 ```
 
-See [`EXTENDING.md`](EXTENDING.md) to add a scenario, tool, agent, or persona, and
-[`MERGE_NOTES.md`](MERGE_NOTES.md) for what came from which original branch.
+---
+
+## Docs
+
+[`ONBOARDING.md`](ONBOARDING.md) (guided reading path) ·
+[`ARCHITECTURE.md`](ARCHITECTURE.md) (design vision) ·
+[`CODEBASE_MAP.md`](CODEBASE_MAP.md) (what runs today) ·
+[`MODELS.md`](MODELS.md) · [`SETUP_DGX_SPARK.md`](SETUP_DGX_SPARK.md) ·
+[`EXTENDING.md`](EXTENDING.md) · [`DOCKER.md`](DOCKER.md)

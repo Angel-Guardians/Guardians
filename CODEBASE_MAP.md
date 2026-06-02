@@ -43,8 +43,11 @@ Guardians/
 │   ├── api/                      # FastAPI routers
 │   │   ├── turn.py               # POST /turn  (text in -> route+reply+tool_calls)
 │   │   ├── vitals.py             # POST /vitals/ingest, GET /vitals (watch contract)
+│   │   ├── voice.py              # ★ WS /voice/ws — bidirectional watch voice loop
 │   │   ├── events_sse.py         # GET /events/sse  (the Live page feed)
-│   │   ├── patient.py            # profile
+│   │   ├── risk.py  location.py  lab_records.py   # risk score · GPS · lab-PDF upload
+│   │   ├── call_bridge.py        # tool calls -> call_request events (Kokoro WAV)
+│   │   ├── patient.py  admin.py  # profile CRUD + dev table browser
 │   │   └── schemas.py            # request/response models
 │   │
 │   ├── events/                   # In-process pub/sub bus + event types
@@ -54,8 +57,9 @@ Guardians/
 │   ├── db/                       # SQLModel models, session, seed (SQLite default)
 │   │   ├── models.py  session.py  seed.py
 │   │
-│   ├── services/                 # patient_profile.py (logic shared with agents)
+│   ├── services/                 # risk_monitor · fall_response · lab_records · medical_history_extract · patient_profile
 │   │
+│   ├── voice/                    # ★ WIRED — Kokoro TTS + faster-whisper STT, call_audio, monitor
 │   └── orchestrator/, always_on/, workers/
 │       └── ⚠ NOT wired — scaffolds that raise NotImplementedError. The
 │         conversational path does not depend on these. Ignore unless your
@@ -63,12 +67,15 @@ Guardians/
 │
 ├── frontend/                     # Next.js 16 (App Router) + Tailwind + shadcn/ui
 │   └── src/
-│       ├── app/{live,vitals,reminders,profile}/page.tsx   # the four pages
+│       ├── app/page.tsx + {live,vitals,reminders,profile,location,medical-history,admin}/   # the pages
 │       ├── hooks/useEventStream.ts        # SSE consumer ({id,kind,ts,summary,payload})
 │       └── lib/api.ts                      # typed client (marks TODO(backend) endpoints)
 │
 ├── data/personas/eleanor.md      # life-history note (RAG source)
 ├── data/cool_spaces.json         # curated cool-space fallback dataset
+│
+├── demo/                         # ★ architecture diagram + demo videos (.mp4),
+│                                 #   SCENARIO_WALKTHROUGHS.md, personas (matthew/sarah)
 │
 ├── scripts/
 │   ├── phase0.py                 # talk to Guardian (text in/out, single process)
