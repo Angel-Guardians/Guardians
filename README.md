@@ -7,7 +7,9 @@
 >
 > Built over one weekend at **NVIDIA Spark Hack · Toronto**.
 
-![Guardian — system architecture](demo/guardian-architecture.png)
+[![Guardian — system architecture](demo/guardian-architecture.png)](https://youtu.be/Dbwv6Ej0kT0)
+
+<p align="center">▶ <a href="https://youtu.be/Dbwv6Ej0kT0"><b>Watch the 60-second demo on YouTube</b></a></p>
 
 ---
 
@@ -87,10 +89,10 @@ pushes a `call_request` so the phone can place the call itself.
 
 ## Demo
 
-Rendered from a real run on the running app (Eleanor, a fall + chest pain):
+▶ **[Watch the 60-second demo on YouTube](https://youtu.be/Dbwv6Ej0kT0)** — the watch and
+the agent system, side by side, on one synchronized clock.
 
-- 🎬 **[60-second walkthrough](demo/guardian-combined-demo.mp4)** — the watch and the
-  agent system, side by side, on one synchronized clock.
+Rendered from a real run on the running app (Eleanor, a fall + chest pain). Source clips:
 - ⌚ **[Watch loop](demo/guardian-watch-demo.mp4)** — vitals → 3-phase fall detection
   → "Are you OK?" → two-way voice.
 - 💻 **[Dashboard / backend flow](demo/guardian-live-demo.mp4)** — message → Safety →
