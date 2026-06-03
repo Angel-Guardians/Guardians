@@ -1,0 +1,36 @@
+Last weekend at NVIDIA Spark Hack in Toronto: one weekend, 48+ intense hours, almost zero sleep. We came out with Guardian, working end to end: the watch senses, the agents reason and act, calling 911, alerting caregivers, and managing meds and appointments.
+
+THE PROBLEM
+Toronto Paramedic Services handled 350,000+ calls in 2024, many from people living alone. The gap before help arrives is where lives are lost. So we built Guardian: a multi-agent home-emergency AI companion. Four clients, one backend, one coordinated pipeline.
+
+⌚ SAMSUNG GALAXY WATCH (Wear OS, Kotlin)
+A standalone watch app tracking heart rate, blood oxygen, HRV and sleep, with a custom three-phase fall detector (free-fall → impact → stillness). On a suspected fall it shows a full-screen "Are you OK?" countdown; no response means a confirmed fall, sent to the backend instantly.
+
+🎙️ VOICE, ON THE WRIST
+When Guardian needs to check in, the watch opens a two-way voice session over a WebSocket: faster-whisper transcribes, the agent reasons, and Kokoro streams the spoken reply back to the watch speaker.
+
+🧠 BACKEND: SIX AGENTS, ONE BRAIN
+A FastAPI + LangGraph backend routes each message to one of six specialists (Safety, Health, Companion, Reminder, Behavior, Caregiver Liaison). A keyword fast-path catches emergencies before the model runs; a weighted risk monitor scores vitals into severity tiers, and a fall instantly forces CRITICAL. Safety calls 911 with the full medical profile; Twilio places the calls.
+
+💻 NEXT.JS DASHBOARD
+Streams the whole pipeline live over Server-Sent Events: agent graph, risk score, vitals charts, location map, and lab-document upload that auto-updates the profile.
+
+📱 FLUTTER APP
+When Guardian triggers call_911, the app dials 911 through the phone's own cellular line and speaks the emergency announcement, with medical context, on speakerphone. The agent calls on the person's behalf.
+
+🧩 RUNS FULLY LOCAL
+The same code runs on OpenAI cloud or fully on an NVIDIA DGX Spark, where we ran Nemotron Nano quantized to NVFP4 via TensorRT, so health data never leaves the device.
+
+STACK
+Backend: Python, FastAPI, LangGraph, SQLModel (SQLite/Postgres), Server-Sent Events, APScheduler, Twilio, pdfplumber
+AI: OpenAI, Nemotron Nano (NVFP4), TensorRT, NVIDIA DGX Spark, Kokoro TTS, faster-whisper
+Watch: Wear OS, Kotlin, Jetpack Compose, Health Services / Health Connect, Room, WebSocket
+Web: Next.js 16, React, Tailwind, shadcn/ui, Recharts, Leaflet
+Mobile: Flutter, fl_chart, audioplayers, flutter_tts
+Infra: Docker
+
+Huge thanks to Kiana Steele for hosting an incredible hackathon, and to NVIDIA, ASUS, and OneEleven for making it possible. And to my teammates who made every piece real: Arian Boukani, Setareh Soltanieh, Mehrazin Alizadeh, and Sahar Soltanieh.
+
+🔗 https://github.com/Angel-Guardians/Guardians
+
+#Hackathon #NVIDIASparkHack #AIAgents #HealthcareAI #LocalAI #NVIDIA #DGXSpark #TensorRT #WearOS #Flutter #NextJS #LangGraph #KokoroTTS #TorontoTech
